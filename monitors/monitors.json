@@ -1,0 +1,8 @@
+[
+  {
+    "name": "otto-watch",
+    "command": "python3 \"${CLAUDE_PLUGIN_ROOT}/scripts/watch.py\"",
+    "description": "Otto: a line when an automation misses, fails, trips its breaker, recovers, or a usage window crosses a threshold. Silent otherwise.",
+    "when": "on-skill-invoke:watch"
+  }
+]

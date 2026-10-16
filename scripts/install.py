@@ -20,7 +20,7 @@ def main() -> int:
     oc.ensure_dirs(home)
     dst.mkdir(parents=True, exist_ok=True)
     n = 0
-    for p in sorted(src.glob("*.py")):
+    for p in sorted(list(src.glob("*.py")) + list(src.glob("*.json"))):
         shutil.copy2(p, dst / p.name)
         n += 1
     if (src / "units").is_dir():

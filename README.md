@@ -34,7 +34,7 @@ As of October 2026, Claude Code gives you five first-party ways to run Claude on
 | **Cap a headless job** | `--max-budget-usd` works in print mode only. Hooks receive no token, cost or rate-limit data, so nothing native can stop a job that is burning a day of budget on retries. | A guarded runner for `claude -p` jobs: turn, budget and time caps, prompts denied rather than left hanging, an attempt cap per day, and a circuit breaker after three consecutive failures. |
 | **Hold the line in a session** | No hook can block a turn because your 5-hour window is at 92 percent. | An opt-in guard that reads the statusline's rate-limit data and warns or blocks at the threshold you set. Off by default. |
 | **Audit context cost with real numbers** | `/skill-doctor` and `claude plugin details` are useful and partial. The community auditors estimate tokens as words times 1.3. | Every skill, agent, plugin, MCP server and CLAUDE.md measured against the real caps, with findings from transcripts labelled MEASURED and findings from file sizes labelled ESTIMATE. |
-| **Know what a change saved** | You apply a recommendation and hope. | A weekly retro that compares the runs before and after each change you logged. A saving exists only once it has been measured. |
+| **Know what a change saved** | You apply a recommendation and hope. | `/otto:experiment` records a baseline, you apply the change, and the verdict comes from three passing runs on each side. A saving exists only once it has been measured. |
 
 If Anthropic ships one of these natively, Otto reads it instead of reimplementing it. The list of what is already native, and therefore not his job, lives in [docs/what-claude-code-does-natively.md](docs/what-claude-code-does-natively.md) and is kept current every release.
 
@@ -104,7 +104,7 @@ The fifteen rules in [config/ops_playbook.md](config/ops_playbook.md), numbered 
 
 ## What you get
 
-Ten thin skills, one agent, five hooks, and a set of Python scripts with no dependencies beyond the standard library. Skills marked *you* only run when you invoke them; the rest Otto can also reach for on his own when a question fits.
+Fifteen thin skills, one agent, five hooks, one background monitor, and a set of Python scripts with no dependencies beyond the standard library. Skills marked *you* only run when you invoke them; the rest Otto can also reach for on his own when a question fits.
 
 | Command | Who | What it does |
 |---|---|---|
@@ -118,8 +118,13 @@ Ten thin skills, one agent, five hooks, and a set of Python scripts with no depe
 | `/otto:onboard` | you | A ten-minute setup interview; writes `~/.otto/otto.md` and asks before touching anything else |
 | `/otto:doctor` | you | Health of Otto himself: versions, statusline capture, registry |
 | `/otto:demo` | you | A tour on a synthetic month of data, before you register anything of your own |
+| `/otto:discover [path]` | you | Finds the automations already on the machine (crontab, launchd, systemd, Desktop tasks, workflows, recurring headless sessions), drafts a note for each you confirm, reports registry drift |
+| `/otto:verify NAME` | you | Lints a note and runs its success check right now; `--drill miss\|auth\|budget\|timeout` stages the failure in a scratch copy and shows what tomorrow's status would say |
+| `/otto:timeline` | both | The day on a grid: runs against the 5-hour windows, the cache TTL and your keyboard hours, with proposed moves and the exact unit command |
+| `/otto:experiment` | you | Estimate a model, cadence or cap change from the job's own ledger, record a baseline, and get a measured before-and-after verdict |
+| `/otto:watch` | you | A live monitor for the session: speaks only when an automation misses, fails, trips its breaker, recovers, or a window crosses a threshold |
 
-**Hooks** (shipped, observe-only, fail open): `Stop` appends the per-session ledger row, `StopFailure` records rate-limit, billing and authentication failures with a timestamp, `Notification` records background-agent completions, `SessionStart` on resume reports the estimated cache-write cost before you continue a stale session, and the optional `UserPromptSubmit` guard described above.
+**Hooks** (shipped, observe-only, fail open): `Stop` appends the per-session ledger row, `StopFailure` records rate-limit, billing and authentication failures with a timestamp, `Notification` records background-agent completions, `SessionStart` on resume reports the estimated cache-write cost before you continue a stale session, and the optional `UserPromptSubmit` guard described above. The **monitor** (`otto-watch`) starts the first time `/otto:watch` runs in a session and polls every five minutes; it also writes `Alerts.md` in the vault and can run from cron with `watch.py --once` when no session is open.
 
 **Portable bundles.** Two skills also ship as standalone `.skill` files for the Claude app's upload dialog: `otto-audit` (the audit with its scripts inside) and `otto` (the persona and playbook, for giving Otto your run histories by hand). Sources are under [`portable/`](portable/); `python3 scripts/bundle.py` builds them and CI attaches them to every tagged release.
 
@@ -165,7 +170,7 @@ Claude Code (validated on 2.1.301), Python 3.9 or newer, macOS or Linux. The sta
 
 ## Status
 
-Version 0.1.0, early. The scripts, skills, hooks and tests are built; a real week of runner data and the measured audit results are still to come. [SCOPE.md](SCOPE.md) says what is in and out, [BUILD.md](BUILD.md) has the plan, [docs/troubleshooting.md](docs/troubleshooting.md) has the common causes of an empty report. Start with `/otto:doctor` when something looks wrong.
+Version 0.1.0, early. The scripts, skills, hooks, monitor and tests are built, including the five skills designed in [docs/skills-roadmap.md](docs/skills-roadmap.md); a real week of runner data and the measured audit results are still to come. [SCOPE.md](SCOPE.md) says what is in and out, [BUILD.md](BUILD.md) has the plan, [docs/troubleshooting.md](docs/troubleshooting.md) has the common causes of an empty report. Start with `/otto:doctor` when something looks wrong.
 
 ---
 

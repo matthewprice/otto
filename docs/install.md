@@ -80,6 +80,14 @@ claude --plugin-dir .
 
 Loads the plugin for that session without a marketplace. Before a release: `python3 -m unittest discover -s tests`, `python3 scripts/bundle.py --check`, and `claude plugin validate --strict .`.
 
+## Optional: alerts without a session
+
+`/otto:watch` runs only while a Claude Code session is open. For the same alerts around the clock, add a cron line that runs one tick every five minutes; it appends to `~/.otto/vault/Alerts.md` and sends a desktop notification on a change:
+
+```
+*/5 * * * * python3 ~/.otto/bin/watch.py --once
+```
+
 ## Checking the install
 
 - `/otto:doctor` reports the plugin version, `~/.otto/bin` version, whether the statusline capture is present, and whether any registry notes exist.

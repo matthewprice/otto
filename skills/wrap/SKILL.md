@@ -12,4 +12,6 @@ For $ARGUMENTS (must be a registry note with `surface: local-cli` and a `command
 3. If a cap is missing from the registry note, propose a value from the run history and ask before writing it into the note.
 4. Run `python3 ~/.otto/bin/units.py $ARGUMENTS` and show the unit. Tell the person to install it themselves and where it goes. Do not install it.
 
+To move a job between surfaces (cron to routine, Desktop task to wrapped claude -p, /loop to cron) read references/migrate.md and print the recipe.
+
 Never add `--dangerously-skip-permissions`. If the job needs a tool, list it under `allowed_tools` in the note.

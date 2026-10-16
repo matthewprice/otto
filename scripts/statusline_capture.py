@@ -16,6 +16,32 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 
+def _append_history(oc, side) -> None:
+    """One line per five minutes or per window change, capped, so timeline.py can replay the week."""
+    try:
+        p = oc.state_dir() / "statusline-history.jsonl"
+        last = None
+        if p.exists():
+            with open(p, "rb") as fh:
+                try:
+                    fh.seek(-2048, 2)
+                except OSError:
+                    fh.seek(0)
+                tail = fh.read().decode("utf-8", "replace").strip().splitlines()
+                if tail:
+                    last = json.loads(tail[-1])
+        rl = side.get("rate_limits") or {}
+        if last and side["captured_at"] - int(last.get("captured_at") or 0) < 300 and last.get("rate_limits") == rl:
+            return
+        with open(p, "a", encoding="utf-8") as fh:
+            fh.write(json.dumps({"captured_at": side["captured_at"], "rate_limits": rl}) + "\n")
+        if p.stat().st_size > 512 * 1024:
+            keep = p.read_text(encoding="utf-8").splitlines()[-2000:]
+            p.write_text("\n".join(keep) + "\n", encoding="utf-8")
+    except Exception:
+        pass
+
+
 def main() -> int:
     raw = sys.stdin.read()
     try:
@@ -31,6 +57,7 @@ def main() -> int:
         side = {"captured_at": int(time.time()), "rate_limits": keep, "session_cost_usd": cost}
         oc.ensure_dirs()
         oc.write_json(oc.state_dir() / "statusline.json", side)
+        _append_history(oc, side)
     except Exception:
         pass
     chain = os.environ.get("OTTO_CHAIN")

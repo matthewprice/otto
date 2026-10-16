@@ -140,11 +140,50 @@ def effects(home: Path, now: datetime, window: int = 7) -> List[Dict[str, Any]]:
     return out
 
 
+def render_markdown(rep: Dict[str, Any]) -> str:
+    """A report someone else can read: names and numbers only, no prompt or output text."""
+    t, p = rep["totals"]["this_period"], rep["totals"]["previous_period"]
+    L = ["# Automations: the last %d days" % rep["days"], "",
+         "Generated %s by Otto. Cost is what Claude Code reported per run (a client-side estimate at list price), not billing data." % rep["generated_at"][:16], "",
+         "| | This period | Previous |", "|---|---|---|",
+         "| Runs | %d | %d |" % (t["runs"], p["runs"]),
+         "| Failed runs | %d | %d |" % (t["failed"], p["failed"]),
+         "| Reported cost | $%.2f | $%.2f |" % (t["cost_usd"], p["cost_usd"]),
+         "| Cost of failed runs | $%.2f | $%.2f |" % (t["failed_cost_usd"], p["failed_cost_usd"]),
+         "| Retry runs | %d | %d |" % (t["retry_runs"], p["retry_runs"]), ""]
+    sc = rep.get("silent_cycles") or {}
+    if sc:
+        L += ["## Cycles by outcome", "", ", ".join("%s %d" % (k, v) for k, v in sorted(sc.items())), ""]
+    L += ["## By automation", "", "| Automation | Runs | Failed | Cost | Change | Median per run |", "|---|---|---|---|---|---|"]
+    for name, e in sorted(rep["by_automation"].items()):
+        c = e["this_period"]
+        ch = e.get("cost_change_percent")
+        L.append("| %s | %d | %d | $%.2f | %s | %s |" % (name, c["runs"], c["failed"], c["cost_usd"],
+                 ("%+d%%" % ch) if ch is not None else "n/a", ("$%.3f" % c["median_cost_usd"]) if c.get("median_cost_usd") is not None else "n/a"))
+    steps = [(n, e["step_change"]) for n, e in rep["by_automation"].items() if e.get("step_change")]
+    if steps:
+        L += ["", "## Step changes (places to look, not causes)", ""]
+        for n, s_ in steps:
+            L.append("- %s: median $%.3f to $%.3f (%+d%%) around %s" % (n, s_["median_before_usd"], s_["median_after_usd"], s_["change_percent"], s_["at"][:10]))
+    ch = rep.get("changes") or []
+    if ch:
+        L += ["", "## Changes and their measured effect", ""]
+        for c in ch:
+            if c.get("measured"):
+                L.append("- %s, %s (%s): median $%.3f before, $%.3f after (%+d%%) over %d and %d runs" % (
+                    c["automation"], c["note"], c["date"][:10], c["median_before_usd"], c["median_after_usd"], c["change_percent"] or 0, c["runs_before"], c["runs_after"]))
+            else:
+                L.append("- %s, %s (%s): not yet measured, %s" % (c["automation"], c["note"], c["date"][:10], c.get("reason", "")))
+    L += ["", "_%s_" % rep["basis"]]
+    return "\n".join(L) + "\n"
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--home")
     sub = ap.add_subparsers(dest="cmd", required=True)
     r = sub.add_parser("report"); r.add_argument("--days", type=int, default=7); r.add_argument("--now")
+    r.add_argument("--markdown", action="store_true", help="a shareable Markdown report instead of JSON")
     c = sub.add_parser("record-change")
     c.add_argument("--automation", required=True); c.add_argument("--note", required=True)
     c.add_argument("--date"); c.add_argument("--kind", default="other")
@@ -154,7 +193,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     cfg = oc.load_config(home)
     tz = oc.get_tz(cfg.get("timezone"))
     if args.cmd == "report":
-        print(json.dumps(report(home, args.days, oc.parse_when(args.now, tz)), indent=2))
+        rep = report(home, args.days, oc.parse_when(args.now, tz))
+        print(render_markdown(rep) if args.markdown else json.dumps(rep, indent=2))
     elif args.cmd == "record-change":
         print(json.dumps(record_change(home, args.automation, args.note, args.date, args.kind)))
     elif args.cmd == "effects":

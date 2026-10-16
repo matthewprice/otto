@@ -44,6 +44,9 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "claude_bin": "",
     "token_cmd": "",            # command that prints CLAUDE_CODE_OAUTH_TOKEN (keychain, pass, op...)
     "tone": "dry",
+    "watch_desktop": True,      # watch: also send a desktop notification on a state change
+    "watch_interval_s": 300,    # watch: seconds between polls
+    "cache_ttl_min": 5,         # timeline: prompt cache TTL used to spot cold starts
 }
 
 
@@ -188,6 +191,42 @@ def parse_frontmatter(text: str) -> Tuple[Dict[str, Any], str]:
 
 def read_frontmatter(path: Path) -> Tuple[Dict[str, Any], str]:
     return parse_frontmatter(path.read_text(encoding="utf-8", errors="replace"))
+
+
+def _yaml_scalar(v: Any) -> str:
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if v is None:
+        return ""
+    if isinstance(v, (int, float)):
+        return str(v)
+    s = str(v)
+    if s == "" or re.search(r"[:#\[\]{}\"'\n]|^\s|\s$", s) or s.lower() in ("true", "false", "null", "yes", "no", "on", "off"):
+        return json.dumps(s)
+    return s
+
+
+def dump_frontmatter(fm: Dict[str, Any], body: str = "") -> str:
+    """Write the same small YAML subset parse_frontmatter reads. Lists go inline."""
+    lines = ["---"]
+    for k, v in fm.items():
+        if k.startswith("_"):
+            continue
+        if isinstance(v, list):
+            lines.append("%s: [%s]" % (k, ", ".join(_yaml_scalar(x) for x in v)))
+        else:
+            lines.append("%s: %s" % (k, _yaml_scalar(v)))
+    lines.append("---")
+    text = "\n".join(lines) + "\n"
+    if body:
+        text += body if body.startswith("\n") else "\n" + body
+        if not text.endswith("\n"):
+            text += "\n"
+    return text
+
+
+def write_note(path: Path, fm: Dict[str, Any], body: str = "") -> None:
+    atomic_write(path, dump_frontmatter(fm, body))
 
 
 # --------------------------------------------------------------------------- config

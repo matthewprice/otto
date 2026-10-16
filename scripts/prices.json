@@ -1,0 +1,11 @@
+{
+  "as_of": "2026-10-06",
+  "source": "Anthropic list prices per million tokens, from the claude-api reference bundled with Claude Code 2.1.301. Cache write is the 1.25x-input convention for the 5-minute TTL and is an assumption. Check platform.claude.com/docs pricing before quoting these.",
+  "per_mtok": {
+    "claude-fable-5-1": {"input": 10.0, "output": 50.0, "cache_read": 0.25, "cache_write": 12.5},
+    "claude-opus-5-5": {"input": 4.0, "output": 20.0, "cache_read": 0.20, "cache_write": 5.0},
+    "claude-sonnet-5-5": {"input": 2.0, "output": 10.0, "cache_read": 0.20, "cache_write": 2.5},
+    "claude-haiku-5-5": {"input": 0.10, "output": 0.50, "cache_read": 0.01, "cache_write": 0.125}
+  },
+  "aliases": {"fable": "claude-fable-5-1", "opus": "claude-opus-5-5", "sonnet": "claude-sonnet-5-5", "haiku": "claude-haiku-5-5"}
+}
