@@ -7,4 +7,5 @@
 - Hooks: Stop, StopFailure, Notification, SessionStart, opt-in guard
 - Portable `.skill` bundles for the Claude app: `otto` (persona) and `otto-audit`, built by `scripts/bundle.py` and attached to GitHub releases
 - Install guide covering Claude Code, the Claude app, Cowork, and other agents
+- Pixel-sprite mascot set on the Clawd body, generated from `assets/make_sprites.py`
 - Synthetic fixtures and tests; CI on Python 3.9 to 3.13

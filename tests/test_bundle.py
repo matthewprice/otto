@@ -18,7 +18,8 @@ class Bundles(unittest.TestCase):
     def setUpClass(cls):
         cls.tmp = tempfile.TemporaryDirectory()
         cls.out = Path(cls.tmp.name) / "dist"
-        cls.assertEqual(cls, bundle.main(["--out", str(cls.out)]), 0)
+        if bundle.main(["--out", str(cls.out)]) != 0:
+            raise RuntimeError("bundle build failed")
 
     @classmethod
     def tearDownClass(cls):
