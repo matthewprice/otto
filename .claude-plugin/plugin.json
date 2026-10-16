@@ -2,7 +2,7 @@
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "otto",
   "version": "0.1.0",
-  "description": "Otto, the ops manager for your Claude automations. Knows what should have run, reads what did and what it cost, treats silence as a finding, paces spend against your limits, and audits your context tax. Proposes; never applies.",
+  "description": "Otto puts every token to work: the ops layer for the Claude jobs that run without you. Keeps the registry and ledger, reports what ran, what silently did not, and what it cost, paces spend against your windows and credits, audits your context tax, and measures every change. Proposes; never applies.",
   "author": {
     "name": "Matt Price",
     "url": "https://github.com/matthewprice"

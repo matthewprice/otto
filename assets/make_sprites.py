@@ -146,8 +146,8 @@ def banner_svg() -> str:
   <g transform="translate(44,36) scale(10)" shape-rendering="crispEdges">{sprite}</g>
   <g font-family="'Courier New', Courier, monospace" font-weight="bold">
     <text x="300" y="100" font-size="52" fill="#f7b32b" letter-spacing="4">OTTO</text>
-    <text x="300" y="144" font-size="21" fill="#e9e3d6">The ops manager for your Claude automations.</text>
-    <text x="300" y="176" font-size="16" fill="#9aa0a8">Knows what should have run. Reads what did. Says what it cost.</text>
+    <text x="300" y="144" font-size="21" fill="#e9e3d6">Put every token to work.</text>
+    <text x="300" y="176" font-size="16" fill="#9aa0a8">The ops layer for the Claude jobs that run without you.</text>
     <text x="300" y="204" font-size="16" fill="#d97757">He proposes. You run the command.</text>
   </g>
 </svg>

@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/banner.svg" width="100%" alt="Otto, the ops manager for your Claude automations. He proposes. You run the command."></p>
+<p align="center"><img src="assets/banner.svg" width="100%" alt="Otto. Put every token to work. The ops layer for the Claude jobs that run without you. He proposes. You run the command."></p>
 
 <p align="center">
   <a href="https://github.com/matthewprice/otto/actions/workflows/ci.yml"><img src="https://github.com/matthewprice/otto/actions/workflows/ci.yml/badge.svg" alt="ci"></a>
@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/dependencies-none-2f8f5b" alt="no dependencies">
 </p>
 
-**Otto is the manager your Claude automations do not have.** He keeps the registry and the ledger of every scheduled or unattended run, reports what ran, what quietly did not, and what it cost, paces your spend against the windows and credits that actually gate your plan, and audits the context tax of everything you have installed. He is a plugin inside Claude Code and the Claude app, on your existing subscription. He proposes. He never changes anything without being told.
+**Put every token to work.** A Claude subscription is a budget of attention that refills every five hours and every week, whether you use it or not. The jobs you schedule are supposed to turn that budget into finished work while you are elsewhere. Otto is the operations layer that makes sure they do: he keeps the registry of what should run, proves what did, counts what it cost, paces spend against the limits that actually gate your plan, audits the context tax of everything you have installed, and measures every change so next week's work costs less than this week's. He runs inside Claude Code and the Claude app on the subscription you already have. He proposes. He never changes anything without being told.
 
 ```
 /plugin marketplace add matthewprice/otto
@@ -20,9 +20,23 @@ Claude app or Cowork: Settings, Plugins, Add marketplace, paste `matthewprice/ot
 
 ---
 
+## Who this is for
+
+Otto is for people who run Claude as infrastructure rather than as a chat window: forward-deployed engineers who have to answer a customer's "did it run, what did it cost, what do we change" in month two of every agent deployment, and practitioners with a Max plan and a crontab who want the windows they pay for filled with work instead of expiring unused.
+
+The levers Otto works, in the order they usually pay:
+
+1. **Fill the windows you already pay for.** Scheduled work that lands in a quiet window is free at the margin; the same work during your keyboard hours competes with you for the limit. `/otto:timeline` shows the day and proposes the move.
+2. **Stop paying for runs that produce nothing.** Retries, turn-limit failures, expired logins that fail three nights in a row, routines that silently skip. `/otto:status` reports the miss first; the runner's breaker stops the bleeding.
+3. **Cut the context tax.** Over-cap descriptions, bloated CLAUDE.md files, never-used MCP servers and skills, jobs that start cold and re-pay their prefix every run. `/otto:audit` measures it; `/otto:timeline` clusters the cold starts.
+4. **Right-size each job.** The digest does not need the model the refactor needs. `/otto:experiment estimate` projects the change from the job's own token mix; `start` and `status` measure whether it paid.
+5. **Keep the proof.** Months of ledger, a weekly retro, and a shareable report, so the number you quote is one you measured.
+
+---
+
 ## What you cannot do in Claude today
 
-As of October 2026, Claude Code gives you five first-party ways to run Claude on a schedule (`/loop` in a session, desktop scheduled tasks, cloud routines, GitHub Actions, Managed Agents) plus Cowork tasks. Each one is good. None of them can see the others, and none of them does any of the following. Otto exists for this list.
+As of October 2026, Claude Code gives you five first-party ways to run Claude on a schedule (`/loop` in a session, desktop scheduled tasks, cloud routines, GitHub Actions, Managed Agents) plus Cowork tasks. Each one is good at running. None of them can see the others, none of them tells you what the fleet is doing with your allowance, and none of them does any of the following. Otto exists for this list.
 
 | | Without Otto | With Otto |
 |---|---|---|

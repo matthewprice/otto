@@ -5,13 +5,13 @@
     "url": "https://github.com/matthewprice"
   },
   "metadata": {
-    "description": "Otto and friends: operations tooling for people who run Claude on a schedule."
+    "description": "Operations tooling for people who run Claude as infrastructure and want their subscription doing work around the clock."
   },
   "plugins": [
     {
       "name": "otto",
       "source": "./",
-      "description": "The ops manager for your Claude automations: registry, ledger, silence detection, budget pacing, context-tax audit.",
+      "description": "Put every token to work: registry, ledger, silence detection, budget pacing, context-tax audit, measured changes, live watch.",
       "category": "monitoring",
       "keywords": ["automation", "observability", "cost", "scheduled-tasks"]
     }
