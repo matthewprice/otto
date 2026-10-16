@@ -1,0 +1,9 @@
+[Unit]
+Description=otto {name} schedule
+
+[Timer]
+OnCalendar={oncalendar}
+Persistent=true
+
+[Install]
+WantedBy=timers.target

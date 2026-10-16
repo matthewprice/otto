@@ -1,0 +1,19 @@
+{
+  "name": "otto",
+  "owner": {
+    "name": "Matt Price",
+    "url": "https://github.com/matthewprice"
+  },
+  "metadata": {
+    "description": "Otto and friends: operations tooling for people who run Claude on a schedule."
+  },
+  "plugins": [
+    {
+      "name": "otto",
+      "source": "./",
+      "description": "The ops manager for your Claude automations: registry, ledger, silence detection, budget pacing, context-tax audit.",
+      "category": "monitoring",
+      "keywords": ["automation", "observability", "cost", "scheduled-tasks"]
+    }
+  ]
+}

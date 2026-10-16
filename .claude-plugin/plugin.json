@@ -1,0 +1,23 @@
+{
+  "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
+  "name": "otto",
+  "version": "0.1.0",
+  "description": "Otto, the ops manager for your Claude automations. Knows what should have run, reads what did and what it cost, treats silence as a finding, paces spend against your limits, and audits your context tax. Proposes; never applies.",
+  "author": {
+    "name": "Matt Price",
+    "url": "https://github.com/matthewprice"
+  },
+  "homepage": "https://github.com/matthewprice/otto",
+  "repository": "https://github.com/matthewprice/otto",
+  "license": "MIT",
+  "keywords": [
+    "automation",
+    "observability",
+    "scheduled-tasks",
+    "token-usage",
+    "cost",
+    "ops",
+    "persona",
+    "claude-code"
+  ]
+}

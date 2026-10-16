@@ -1,0 +1,6 @@
+[Unit]
+Description=otto {name}
+
+[Service]
+Type=oneshot
+ExecStart={python} {runner} {name}
