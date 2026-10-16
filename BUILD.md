@@ -14,4 +14,4 @@ Built so far (v0.1.0 scaffold): all scripts, ten skills, agent, hooks, fixtures,
 | M8 | The five roadmap skills (discover, verify, timeline, experiment, watch) built with tests; verify the monitor starts from `/otto:watch` in a real session and that `discover` reads a real crontab and LaunchAgent | built, to verify live |
 | M7 | Deferred: PreCompact check, Windows | later |
 
-Known gaps: the guard reads a statusline capture that is one turn stale; SDK credit figures are an estimate; the name `otto` is used by other AI products (ottoai on PyPI, otto8-ai/otto8, Ask Otto), so the repo and plugin are `matthewprice/otto` and the character stays Otto; the `plugin-validate` CI job is continue-on-error until seen green once.
+Known gaps: the guard reads a statusline capture that is one turn stale; SDK credit figures are an estimate; the name `otto` is used by other AI products (ottoai on PyPI, otto8-ai/otto8, Ask Otto), so the repo and plugin are `matthewprice/otto` and the character stays Otto.

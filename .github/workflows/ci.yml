@@ -21,10 +21,8 @@ jobs:
           path: dist/
   plugin-validate:
     # Runs Claude Code's own manifest validator. The CLI is installed from npm and needs no login
-    # for `plugin validate`. Marked continue-on-error until the step has been seen green once;
-    # flip it to false after the first successful run.
+    # for `plugin validate`. Seen green on the first run (2026-10-16), so it now fails the build.
     runs-on: ubuntu-latest
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
