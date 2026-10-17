@@ -1,8 +1,8 @@
 {
   "$schema": "https://anthropic.com/claude-code/plugin.schema.json",
   "name": "otto",
-  "version": "0.1.0",
-  "description": "Otto puts every token to work: the ops layer for the Claude jobs that run without you. Keeps the registry and ledger, reports what ran, what silently did not, and what it cost, paces spend against your windows and credits, audits your context tax, and measures every change. Proposes; never applies.",
+  "version": "0.2.0",
+  "description": "Otto puts every token to work: the ops layer for the Claude jobs that run without you. Keeps the registry and ledger, reports what ran, what silently did not, and what it cost, paces spend against your windows and credits, audits your context tax, and measures every change. Proposes by default; applies only what you grant in steward mode.",
   "author": {
     "name": "Matt Price",
     "url": "https://github.com/matthewprice"
