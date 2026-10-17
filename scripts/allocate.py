@@ -14,18 +14,22 @@ Procedure, in order:
   1. Cadence. 5 consecutive runs below a quarter of the fleet median: alternate days. 10: parked.
      A parked strategy, a blocked one (diagnosis) or one not running or ready gets nothing.
   2. Reserve consumers. A strategy with a steward experiment collecting treatment runs, and a
-     newly approved strategy (its first run within its last 7, running or ready), are taken out of the softmax
-     pass. Their needs (the grant's searches max for an experiment; the exploration floor, the
-     exploration share of the pool split evenly, for a new strategy) are set aside first.
+     newly approved strategy (fewer than 3 runs ever and its first run within 14 days, running or
+     ready), are taken out of the softmax pass. Their needs (the grant's searches max for an
+     experiment; for a new strategy its exploration floor, the larger of searches.min and the
+     exploration share of the pool split evenly) are set aside first.
   3. Shares. A softmax over the smoothed yield of the remaining strategies, each divided by the
      best one's yield first, at the temperature in steward_rules.json.
-  4. Clip. Every move is at most the daily shift bound from today's searches, and inside the
-     grant's searches bounds.
-  5. Budget. The regular strategies stay inside the pool minus the set-aside; if their lower
-     limits alone exceed the pool, they are scaled down pro rata.
+  4. Clip. Every move is at most the daily shift bound from today's searches, then the value is
+     put inside [searches.min, searches.max]: the minimum wins over the shift bound. 0 is emitted
+     only for a parked or blocked strategy. A strategy with mode ad-hoc gets no schedule change.
+  5. Budget. The regular strategies stay inside the pool minus the set-aside. If their minimums
+     alone exceed the pool, the lowest-yield ones are held at no change (searches null, unfunded)
+     rather than given a value below searches.min.
   6. Reserve. reserve = pool minus what the regular strategies were allocated. It pays only its
      two consumers, in order: experiments first, then new strategies, each clipped to what is
-     left. The rest stays unspent. Slack is never redistributed to existing strategies: more
+     left; one that cannot get searches.min is marked unfunded with no change proposed. The rest
+     stays unspent. Slack is never redistributed to existing strategies: more
      volume on the same sources is the failure the Steward exists to stop.
   7. Models, from the diagnosis only: a judgment leak moves the score stage up one tier, a cost
      leak moves the non-volume stages down one. Volume stages never leave the lowest tier, and no
@@ -41,6 +45,7 @@ import argparse
 import json
 import math
 import os
+from datetime import timedelta
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -212,12 +217,15 @@ def plan(home: Path, pool: int, g: Optional["steward.Grant"] = None, settings_pa
                    "searches_now": cur_searches, "daily_cap_now": st.get("daily_cap"),
                    "stages_now": dict(st.get("stages") or {}), "runs": int(ys.get("runs") or 0),
                    "smoothed_yield": ys.get("smoothed_yield"), "sample": ys.get("sample", "small"),
-                   "leak": dg.get("leak", "no-data"), "runs_below_median": below, "reasons": []}
+                   "leak": dg.get("leak", "no-data"), "runs_below_median": below, "reasons": [],
+                   "mode": str(st.get("mode") or "scheduled")}
 
     # 1. cadence and who takes part
     takers: List[str] = []
     for n, r in rows.items():
-        if r["leak"] in ("blocked", "no-data") or r["status"] not in LIVE:
+        if r["mode"] == "ad-hoc":
+            sched, why = r["schedule_now"], None  # run by hand: the plan never proposes a schedule
+        elif r["leak"] in ("blocked", "no-data") or r["status"] not in LIVE:
             sched, why = r["schedule_now"], None  # no yield to judge a cadence by
         else:
             sched, why = _cadence(r["schedule_now"], r["runs_below_median"], g)
@@ -242,14 +250,26 @@ def plan(home: Path, pool: int, g: Optional["steward.Grant"] = None, settings_pa
     consumers = reserve_consumers(rules)
     exp_targets = active_experiment_targets(home) if "experiment" in consumers else set()
     exp_draw = [n for n in takers if n in exp_targets]
-    # New: its first run is within its last 7 runs, counted over all time, not just the window.
+    # Newly approved: fewer than new_strategy_runs runs over its whole history, and its first run
+    # within the last new_strategy_days days. Everything else, small samples included, goes through
+    # the normal pass (yield.py's smoothing already damps small samples).
     ylib = steward.load_script("yield")
+    rr = rules.get("reserve") or {}
+    new_runs, new_days = int(rr.get("new_strategy_runs", 3)), int(rr.get("new_strategy_days", 14))
+    clock = now or datetime.now().astimezone()
     for n in takers:
-        rows[n]["runs_ever"] = len(ylib.read_runs(home, until=now, strategy=n))
-    new_n = int((rules.get("reserve") or {}).get("new_strategy_runs", 7))
-    new_draw = [n for n in takers if "new-strategy" in consumers and n not in exp_targets and rows[n]["runs_ever"] <= new_n]
+        hist = ylib.read_runs(home, until=clock, strategy=n)
+        rows[n]["runs_ever"] = len(hist)
+        rows[n]["first_run"] = hist[0]["ts"] if hist else None
+    def is_new(n: str) -> bool:
+        r = rows[n]
+        if r["runs_ever"] >= new_runs:
+            return False
+        return r["first_run"] is None or oc.parse_when(r["first_run"]) >= clock - timedelta(days=new_days)
+    new_draw = [n for n in takers if "new-strategy" in consumers and n not in exp_targets and is_new(n)]
     regular = [n for n in takers if n not in exp_draw and n not in new_draw]
-    floor_each = (explore * pool / len(new_draw)) if new_draw else 0.0
+    # The floor never sits below the grant's searches.min, so the client never gets a value it must refuse.
+    floor_each = max(float(sb["min"]), explore * pool / len(new_draw)) if new_draw else 0.0
     need = {n: float(sb["max"]) for n in exp_draw}
     need.update({n: min(float(sb["max"]), floor_each) for n in new_draw})
     # The consumers' needs are set aside before the softmax pass, so the regular strategies cannot
@@ -269,15 +289,20 @@ def plan(home: Path, pool: int, g: Optional["steward.Grant"] = None, settings_pa
         r = rows[n]
         target = shares[n] * regular_budget
         cur = r["searches_now"]
-        lo, hi = float(sb["min"]), float(sb["max"])
+        smin, smax = float(sb["min"]), float(sb["max"])
+        lo, hi = smin, smax
         if cur is not None and cur > 0:
             lo = max(lo, cur * (1 - shift))
             hi = min(hi, cur * (1 + shift))
-        lo = min(lo, hi)
+        # Every value lands inside [searches.min, searches.max] after the shift bound: a strategy
+        # the bound would leave below the minimum is raised to it, one above the maximum is cut.
+        lo, hi = min(max(lo, smin), smax), min(max(hi, smin), smax)
+        if lo > hi:
+            lo = hi
         v = min(max(target, lo), hi)
         r["share_target"] = round(shares[n], 4)
-        r["searches"] = int(math.floor(v))
-        lower[n] = int(math.ceil(lo))
+        r["searches"] = max(int(sb["min"]), int(math.floor(v)))
+        lower[n] = max(int(sb["min"]), int(math.ceil(lo)))
         if cur is not None and abs(v - target) > 0.5:
             r["reasons"].append("clipped from %d to %d by the %d%% daily shift bound and the searches bounds" % (round(target), r["searches"], round(shift * 100)))
 
@@ -295,11 +320,29 @@ def plan(home: Path, pool: int, g: Optional["steward.Grant"] = None, settings_pa
                 rows[n]["reasons"].append("trimmed %d to keep the reserve's set-aside whole" % take)
                 excess -= take
     total = sum(rows[n]["searches"] for n in regular)
-    if total > pool:  # the lower limits alone exceed the pool: the pool wins, pro rata
-        for n in regular:
-            rows[n]["searches"] = int(math.floor(rows[n]["searches"] * pool / float(total))) if total else 0
-        pool_note = "the pool is below the sum of the lower limits; every regular strategy was scaled down pro rata and some bounds do not hold"
-    allocated = sum(rows[n]["searches"] for n in regular)
+    held: List[str] = []
+    if total > pool:
+        # The lower limits alone exceed the pool. Scaling everyone below searches.min would hand the
+        # client values it must refuse, so the lowest-yield strategies are dropped to their minimum
+        # first, then held at no change (searches None) until the rest fits.
+        for n in sorted(regular, key=lambda k: (filled.get(k) or 0.0, k)):
+            if total <= pool:
+                break
+            cut = rows[n]["searches"] - int(sb["min"])
+            if cut > 0:
+                take = min(cut, total - pool)
+                rows[n]["searches"] -= take
+                total -= take
+        for n in sorted(regular, key=lambda k: (filled.get(k) or 0.0, k)):
+            if total <= pool:
+                break
+            total -= rows[n]["searches"]
+            rows[n]["searches"] = None
+            rows[n]["unfunded"] = True
+            rows[n]["reasons"].append("held at no change: the pool cannot cover searches.min %d for every strategy" % int(sb["min"]))
+            held.append(n)
+        pool_note = "the pool is below the sum of the lower limits; %d strategy%s held at no change" % (len(held), "" if len(held) == 1 else "s")
+    allocated = sum(rows[n]["searches"] or 0 for n in regular)
 
     # 6. the reserve: pool minus what the regular strategies were allocated. Only two consumers may
     # draw on it, in this order: experiment treatment runs, then newly approved strategies. Each is
@@ -312,25 +355,35 @@ def plan(home: Path, pool: int, g: Optional["steward.Grant"] = None, settings_pa
             r = rows[n]
             want = int(math.ceil(need[n]))
             got = min(want, left)
+            r["reserve_consumer"] = kind
+            if kind == "new-strategy":
+                r["floor_searches"] = want
+            if got < int(sb["min"]):
+                # Not enough left to fund even searches.min: say so, propose no searches change.
+                r["searches"] = None
+                r["unfunded"] = True
+                r["reasons"].append("%s: the reserve has %d left, below searches.min %d; not funded tonight, no change proposed" % (
+                    "experiment collecting" if kind == "experiment" else "new strategy", left, int(sb["min"])))
+                continue
             left -= got
             drawn[kind] += got
             r["searches"] = got
             r["funded_from"] = "reserve"
-            r["reserve_consumer"] = kind
             if kind == "experiment":
                 r["reasons"].append("experiment collecting: treatment runs funded from the reserve at searches max %d%s" % (
                     int(sb["max"]), "" if got >= want else ", clipped to %d (reserve short)" % got))
             else:
-                r["floor_searches"] = want
                 r["reasons"].append("new strategy (%d runs ever): funded from the reserve at its exploration floor of %d%s" % (
                     r["runs_ever"], want, "" if got >= want else ", clipped to %d (reserve short)" % got))
     unspent = left
-    total = sum(rows[n]["searches"] for n in rows)
+    total = sum(rows[n]["searches"] or 0 for n in rows)
 
     # daily cap, models, share, change list
     for n, r in rows.items():
         cap = r["daily_cap_now"]
-        if isinstance(cap, (int, float)) and not isinstance(cap, bool) and r["searches_now"] and r["searches"]:
+        if r.get("unfunded"):
+            r["daily_cap"] = cap
+        elif isinstance(cap, (int, float)) and not isinstance(cap, bool) and r["searches_now"] and r["searches"]:
             v = cap * r["searches"] / float(r["searches_now"])
             v = min(max(v, cap * (1 - shift)), cap * (1 + shift))
             r["daily_cap"] = int(min(max(round(v), cb["min"]), cb["max"]))
@@ -341,10 +394,12 @@ def plan(home: Path, pool: int, g: Optional["steward.Grant"] = None, settings_pa
         stages, why = plan_models(r["stages_now"], r["leak"], g) if not r.get("exclude") else (dict(r["stages_now"]), [])
         r["stages"] = stages
         r["reasons"].extend(why)
-        r["share"] = round(r["searches"] / float(pool), 4) if pool else 0.0
+        r["share"] = round((r["searches"] or 0) / float(pool), 4) if pool else 0.0
         changes = []
         for key, old, new in (("searches", r["searches_now"], r["searches"]), ("daily_cap", r["daily_cap_now"], r["daily_cap"]),
                               ("schedule", r["schedule_now"], r["schedule"]), ("stages", r["stages_now"], r["stages"])):
+            if key == "searches" and new is None:
+                continue  # unfunded: no searches change proposed
             if old != new:
                 lever = LEVER_FOR[key]
                 ok, gwhy = g.why(lever)
@@ -361,7 +416,8 @@ def plan(home: Path, pool: int, g: Optional["steward.Grant"] = None, settings_pa
            "within_pool": total <= pool, "dry_run": bool(dry_run), "mode": g.mode,
            "bounds": {"searches": sb, "daily-cap": cb, "exploration-share": explore, "models": g.bounds("models")},
            "settings_source": settings_src, "fleet_median_yield_per_unit": fleet_med,
-           "strategies": {n: rows[n] for n in sorted(rows, key=lambda k: (-rows[k]["searches"], k))},
+           "strategies": {n: rows[n] for n in sorted(rows, key=lambda k: (-(rows[k]["searches"] or 0), k))},
+           "unfunded": sorted(n for n in rows if rows[n].get("unfunded")),
            "pool_note": pool_note,
            "allocated_regular": allocated, "reserve": reserve, "reserve_drawn": drawn, "reserve_unspent": unspent,
            "reserve_consumers": consumers,
@@ -377,7 +433,7 @@ def render(p: Dict[str, Any]) -> str:
     L = ["Allocation for tomorrow (%s%s): %d of %d searches in the pool" % (p["mode"], ", dry run" if p["dry_run"] else "", p["total_searches"], p["pool"])]
     L.append("%-14s %8s %6s %6s %-10s %-9s %s" % ("strategy", "searches", "was", "share", "cadence", "leak", "reason"))
     for n, r in p["strategies"].items():
-        L.append("%-14s %8d %6s %5d%% %-10s %-9s %s" % (n[:14], r["searches"], "-" if r["searches_now"] is None else r["searches_now"],
+        L.append("%-14s %8s %6s %5d%% %-10s %-9s %s" % (n[:14], "held" if r["searches"] is None else r["searches"], "-" if r["searches_now"] is None else r["searches_now"],
                                                      round(r["share"] * 100), r["schedule"], r["leak"], r["reason"]))
         for c in r["changes"]:
             if c["field"] == "stages":

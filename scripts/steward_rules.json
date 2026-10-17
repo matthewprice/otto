@@ -51,7 +51,8 @@
   "reserve": {
     "about": "Pool minus what the regular strategies are allocated. Never redistributed to existing strategies; only these consumers draw on it, in this order.",
     "consumers": ["experiment", "new-strategy"],
-    "new_strategy_runs": 7
+    "new_strategy_runs": 3,
+    "new_strategy_days": 14
   },
   "experiment": {
     "baseline_runs": 3,
