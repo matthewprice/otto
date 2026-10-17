@@ -634,6 +634,56 @@ class Evolve(unittest.TestCase):
             self.assertEqual(gains, sorted(gains, reverse=True))
             self.assertIn("public-data", [s["from"] for s in p["propose_strategy"]])
 
+    def test_start_refuses_small_sample_unless_by_person(self):
+        with tempfile.TemporaryDirectory() as t:
+            h, g = self._home(t)
+            Y.ingest(h, [run_row("young", i, 10 - i, scored=1) for i in range(1, 6)])
+            r = evolve.start(h, g, "young", "method", "new sources", "abcdef1", now=NOW)
+            self.assertIn("error", r)
+            self.assertIn("tentative: 5 runs, structural changes apply at 7", r["error"]); self.assertIn("--by-person", r["error"])
+            self.assertEqual(evolve.records(h), [])
+            ok = evolve.start(h, g, "young", "method", "new sources", "abcdef1", now=NOW, by_person=True)
+            self.assertEqual(ok["status"], "collecting"); self.assertIn("--by-person", ok["applied_under"]); self.assertIn("tentative", ok["tentative"])
+            r = subprocess.run([sys.executable, str(ROOT / "scripts/evolve.py"), "--grant", str(h / "steward-grant.md"), "--now", oc.iso(NOW),
+                                "start", "--target", "young", "--lever", "gates", "--hypothesis", "x", "--commit", "1234567"],
+                               capture_output=True, text=True, env=dict(os.environ, OTTO_HOME=str(h)))
+            self.assertEqual(r.returncode, 0)
+            self.assertTrue(r.stdout.startswith("refused: "), r.stdout)
+
+    def test_propose_lists_small_samples_apart(self):
+        with tempfile.TemporaryDirectory() as t:
+            h, g = self._home(t)
+            # a 5-run strategy with a clear source leak
+            Y.ingest(h, [run_row("young", i, 10 - i, examined=80, candidates=1, prescreen_pass=0) for i in range(1, 6)])
+            p = evolve.propose(h, g, NOW)
+            self.assertNotIn("young", [c["target"] for c in p["candidates"]])
+            small = [c for c in p["small_sample"] if c["target"] == "young"]
+            self.assertEqual(len(small), 1); self.assertFalse(small[0]["allowed"]); self.assertEqual(small[0]["lever"], "method")
+            self.assertTrue(all(c["allowed"] or not c["tentative"] for c in p["candidates"]))
+            self.assertIn("Proposals (small sample)", evolve.render_proposals(p))
+
+    def test_done_and_ad_hoc_strategies_are_skipped(self):
+        with tempfile.TemporaryDirectory() as t:
+            h, g = self._home(t)
+            st = json.loads((h / "strategies.json").read_text())
+            st["accelerators"]["status"] = "done"
+            st["subscriptions"]["mode"] = "ad-hoc"
+            (h / "strategies.json").write_text(json.dumps(st))
+            d = diagnose.report(h, 30, NOW, g)
+            self.assertNotIn("accelerators", d["strategies"]); self.assertNotIn("subscriptions", d["strategies"])
+            self.assertEqual(d["skipped"], {"accelerators": "status done", "subscriptions": "mode ad-hoc"})
+            self.assertNotIn("accelerators", d["order"])
+            text = diagnose.render(d)
+            self.assertIn("accelerators     skipped   status done", text)
+            p = evolve.propose(h, g, NOW)
+            targets = [c["target"] for c in p["candidates"] + p["held"] + p["small_sample"]]
+            self.assertNotIn("accelerators", targets); self.assertNotIn("subscriptions", targets)
+            self.assertIn("skipped: accelerators, status done", evolve.render_proposals(p))
+            # an explicit --settings file wins over OTTO_HOME/strategies.json
+            other = h / "other.json"
+            other.write_text(json.dumps({"accelerators": {"status": "running"}}))
+            self.assertIn("accelerators", diagnose.report(h, 30, NOW, g, settings_path=str(other))["strategies"])
+
     def test_experiment_py_ignores_steward_records(self):
         with tempfile.TemporaryDirectory() as t:
             h, g = self._home(t)
