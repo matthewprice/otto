@@ -91,6 +91,8 @@ The funnel says where a strategy loses opportunities, and each stage maps to one
 | Cost | Yield fine, run-units well above the fleet | Non-volume stages down one tier, searches down | Nightly |
 | Blocked | Runs blocked by network or fetch | None; reported as a missed run and excluded from yield | Sentinel |
 
+Small samples get the budget levers only: while a strategy has fewer than 7 runs (`levers.structural_min_runs`, which a grant may lower with `structural-min-runs`), its searches, daily cap and cadence may still move, but model, gate, method and skill changes are proposed with the reason "tentative: N runs, structural changes apply at 7", and parking waits for a full sample.
+
 `diagnose.py report` prints the leak, the evidence numbers, the lever, whether the grant lets it apply, and whether it is a nightly or weekly action. The thresholds are in `steward_rules.json`.
 
 ## Nightly allocation
