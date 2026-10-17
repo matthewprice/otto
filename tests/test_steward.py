@@ -522,7 +522,7 @@ class Repo(unittest.TestCase):
 
     def test_no_em_dashes_in_new_files(self):
         for p in [ROOT / "config/steward.template.md", ROOT / ".out-of-scope/auto-apply.md", ROOT / "agents/otto.md"] + list((ROOT / "scripts").glob("*.py")):
-            self.assertNotIn("—", p.read_text(encoding="utf-8"), p.name)
+            self.assertNotIn("\u2014", p.read_text(encoding="utf-8"), p.name)
 
 
 if __name__ == "__main__":
