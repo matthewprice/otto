@@ -52,11 +52,11 @@ Rules no grant can override: the Steward never raises a pool, never uses a model
 One JSON line per strategy run in `OTTO_HOME/yield/YYYY-MM.jsonl`, written by `yield.py ingest`. Numbers and short labels only, in the same allowlist tradition as Otto's run ledger: free text is dropped except a 120-character `notes` field and the strategy and opportunity slugs.
 
 ```json
-{"ts": "2026-10-16T13:11:00Z", "strategy": "S08", "run": 2, "model": "opus", "stages": {"triage": "haiku"},
- "searches": 148, "run_units": 4.5, "run_units_label": "ESTIMATE",
- "examined": 30, "candidates": 14, "prescreen_pass": 0,
- "dropped": {"filter1": 0, "filter2": 1, "filter3": 4, "overlap": 2},
- "scored": 0, "at_floor": 0, "best_score": null, "slugs": [], "blocked": false, "notes": "cursor: grossing chart"}
+{"ts": "2026-01-12T14:05:00Z", "strategy": "Q7", "run": 4, "model": "sonnet", "stages": {"triage": "haiku"},
+ "searches": 90, "run_units": 2.5, "run_units_label": "ESTIMATE",
+ "examined": 24, "candidates": 9, "prescreen_pass": 3,
+ "dropped": {"filter1": 2, "filter2": 1, "filter4": 2, "overlap": 1},
+ "scored": 3, "at_floor": 1, "best_score": 67, "slugs": ["example-opportunity"], "blocked": false, "notes": "cursor: page 3 of an example list"}
 ```
 
 Later events per opportunity (`scored`, `at_floor`, `top20`, `keep`, `kill`, `archived`) go to `OTTO_HOME/yield/outcomes.jsonl` through `yield.py outcomes`. Both are keyed, so a client can rebuild them from its own records every night and nothing is counted twice. Building the rows is the client's job; the math is Otto's.
@@ -91,7 +91,7 @@ The funnel says where a strategy loses opportunities, and each stage maps to one
 | Cost | Yield fine, run-units well above the fleet | Non-volume stages down one tier, searches down | Nightly |
 | Blocked | Runs blocked by network or fetch | None; reported as a missed run and excluded from yield | Sentinel |
 
-Small samples get the budget levers only: while a strategy has fewer than 7 runs (`levers.structural_min_runs`, which a grant may lower with `structural-min-runs`), its searches, daily cap and cadence may still move, but model, gate, method and skill changes are proposed with the reason "tentative: N runs, structural changes apply at 7", and parking waits for a full sample.
+Only strategies whose settings say `status: running` or `ready` and `mode: scheduled` are diagnosed or proposed for experiments; ad-hoc and done ones are skipped with one line each. Small samples get the budget levers only: while a strategy has fewer than 7 runs (`levers.structural_min_runs`, which a grant may lower with `structural-min-runs`), its searches, daily cap and cadence may still move, but model, gate, method and skill changes are proposed with the reason "tentative: N runs, structural changes apply at 7", and parking waits for a full sample.
 
 `diagnose.py report` prints the leak, the evidence numbers, the lever, whether the grant lets it apply, and whether it is a nightly or weekly action. The thresholds are in `steward_rules.json`.
 
@@ -115,7 +115,7 @@ It writes `OTTO_HOME/allocation.json` and prints the plan, with each change mark
 `evolve.py` extends Otto's experiment pattern for strategies. Each experiment is one change to one target, with a baseline from the last 3 passing runs and a treatment of the next 3:
 
 - `propose` ranks candidates from the diagnosis, at most one per target, within `max-active`.
-- `start --target --lever --hypothesis --commit` records the baseline and the revert command after the client has committed the change.
+- `start --target --lever --hypothesis --commit` records the baseline and the revert command after the client has committed the change. On a small sample it refuses unless `--by-person` says the person made the change; `propose` lists small-sample candidates apart, as proposals for the person, never as actionable.
 - `status` counts treatment runs.
 - `verdict` applies `keep-if`: keep, revert (with the exact `git revert` command and any counter to restore), or extend once by 2 runs when the result is inconclusive at equal cost.
 
