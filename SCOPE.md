@@ -12,7 +12,7 @@ Otto watches and advises. He does not run your work, except through the optional
 
 ## Out of scope
 - Applying changes to a user's automations or settings without a steward grant, or to anything a grant does not name (`.out-of-scope/auto-apply.md`)
-- Creating or deleting a strategy, raising a pool, or editing a rubric, kill list or archive, with or without a grant
+- With or without a grant: creating or deleting a strategy, raising a pool, using a model above the grant's ceiling, editing the rubric, kill list, recommendation, index or archive, or queuing a persona review (the Rails section of `docs/steward.md`)
 - Dashboards served over a network, accounts, or telemetry
 - Reading or storing prompt and output text
 - Exact token counts; Otto reports what Claude Code reported and labels estimates

@@ -148,7 +148,7 @@ Off by default. If you run a fleet of scheduled discovery jobs and want Otto to 
 
 Unused pool is never handed to the strategies already running, since more volume on the same sources is exactly the failure he exists to stop. It is kept as a reserve that funds only experiments in progress and newly approved strategies, and whatever they do not need stays unspent.
 
-He applies only what the grant names. Everything else stays a proposal, and he never creates or deletes a strategy, raises a pool, or touches a rubric. Every applied change is one commit, logged with the command that reverts it. A pause file stops him outright. Four skills drive it: `/otto:yield`, `/otto:allocate`, `/otto:evolve` and `/otto:steward`. The grant template is [config/steward.template.md](config/steward.template.md) and the design is [docs/steward.md](docs/steward.md).
+He applies only what the grant names. Everything else stays a proposal. With or without a grant he never creates or deletes a strategy, raises a pool, uses a model above the grant's ceiling, edits the rubric, kill list, recommendation, index or archive, or queues a persona review (the full list is in [the Rails section of docs/steward.md](docs/steward.md#rails-in-one-place)). Every applied change is one commit, logged with the command that reverts it. A pause file stops him outright. Four skills drive it: `/otto:yield`, `/otto:allocate`, `/otto:evolve` and `/otto:steward`. The grant template is [config/steward.template.md](config/steward.template.md) and the design is [docs/steward.md](docs/steward.md).
 
 ---
 
