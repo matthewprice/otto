@@ -26,6 +26,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import exp_common as xc  # noqa: E402
 import health  # noqa: E402
 import ledger  # noqa: E402
 import otto_common as oc  # noqa: E402
@@ -35,10 +36,7 @@ PRICES = Path(__file__).resolve().parent / "prices.json"
 CADENCE_RUNS = {"daily": 7, "weekdays": 5, "weekly": 1}
 
 
-def exp_dir(home: Path) -> Path:
-    d = home / "experiments"
-    d.mkdir(parents=True, exist_ok=True)
-    return d
+exp_dir = xc.exp_dir  # shared with evolve.py; kept here so existing callers still work
 
 
 def _passing(home: Path, name: str, since: Optional[datetime] = None, until: Optional[datetime] = None) -> List[Dict[str, Any]]:
@@ -48,8 +46,7 @@ def _passing(home: Path, name: str, since: Optional[datetime] = None, until: Opt
 
 def _medians(rows: List[Dict[str, Any]]) -> Dict[str, Any]:
     def med(key, scale=1.0):
-        xs = [r[key] * scale for r in rows if r.get(key) is not None]
-        return round(oc.median(xs), 4) if xs else None
+        return xc.median_of(rows, key, scale)
     toks = [sum((r.get("tokens") or {}).values()) for r in rows if r.get("tokens")]
     return {"runs": len(rows), "cost_usd": med("cost_usd"), "duration_min": med("duration_ms", 1 / 60000.0),
             "num_turns": med("num_turns"), "tokens": int(oc.median(toks)) if toks else None,
@@ -146,8 +143,7 @@ def start(home: Path, name: str, change: str, kind: str = "other", runs: int = 3
     now = now or oc.parse_when(None, oc.get_tz(cfg.get("timezone")))
     name = oc.slug(name)
     before = _passing(home, name, since=now - timedelta(days=60), until=now)[-max(runs, 7):]
-    n = len(list(exp_dir(home).glob(name + "-*.json"))) + 1
-    eid = "%s-%s-%d" % (name, now.strftime("%Y%m%d"), n)
+    eid = xc.next_id(home, name, now.strftime("%Y%m%d"))
     rec = {"id": eid, "automation": name, "change": oc.short(change, 200), "kind": oc.short(kind, 32), "runs_needed": int(runs),
            "started": oc.iso(now), "status": "collecting", "baseline": _medians(before),
            "note": "Apply the change yourself. Otto records; it does not apply."}
@@ -162,9 +158,8 @@ def status(home: Path, eid: Optional[str] = None, now: Optional[datetime] = None
     cfg = oc.load_config(home)
     now = now or oc.parse_when(None, oc.get_tz(cfg.get("timezone")))
     out = []
-    for p in sorted(exp_dir(home).glob("*.json")):
-        rec = oc.read_json(p, None)
-        if not rec or (eid and rec.get("id") != eid):
+    for p, rec in xc.iter_records(home, family=None):
+        if eid and rec.get("id") != eid:
             continue
         started = oc.parse_when(rec["started"], now.tzinfo)
         after_all = _passing(home, rec["automation"], since=started, until=now)
@@ -177,7 +172,7 @@ def status(home: Path, eid: Optional[str] = None, now: Optional[datetime] = None
             res: Dict[str, Any] = {}
             for key in ("cost_usd", "duration_min", "tokens"):
                 if b.get(key) and a.get(key) is not None:
-                    res[key] = {"before": b[key], "after": a[key], "change_percent": round((a[key] / b[key] - 1) * 100)}
+                    res[key] = {"before": b[key], "after": a[key], "change_percent": xc.change_percent(b[key], a[key], None)}
             cp = (res.get("cost_usd") or {}).get("change_percent")
             if cp is None:
                 verdict = "inconclusive: no cost on one side"
@@ -189,9 +184,8 @@ def status(home: Path, eid: Optional[str] = None, now: Optional[datetime] = None
                 verdict = "does not pay: median cost up %d%%" % cp
             else:
                 verdict = "inconclusive: within 10%"
-            total = b["runs"] + a["runs"]
-            rec.update({"result": res, "verdict": verdict, "status": "done", "small_sample": total < 7,
-                        "caveat": ("%d runs in total is a small sample" % total) if total < 7 else None})
+            small, caveat = xc.sample_caveat(b["runs"] + a["runs"])
+            rec.update({"result": res, "verdict": verdict, "status": "done", "small_sample": small, "caveat": caveat})
             oc.write_json(p, rec)
         else:
             rec["waiting"] = "%d of %d passing runs after the change" % (a["runs"], rec["runs_needed"])

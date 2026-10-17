@@ -1,0 +1,70 @@
+{
+  "version": 1,
+  "about": "Steward rules: the yield points table, smoothing, allocation and diagnosis thresholds. A grant may override points with a metric-points block. Every number here is a rule, not a measurement.",
+  "points": {
+    "scored": 1,
+    "at_floor": 3,
+    "top20": 8,
+    "keep": 20,
+    "kill": -2,
+    "archived": -1
+  },
+  "smoothing_runs": 3,
+  "small_sample_runs": 7,
+  "below_median_fraction": 0.25,
+  "demote_alternate_runs": 5,
+  "park_runs": 10,
+  "softmax_temperature": 0.5,
+  "model_tiers": ["haiku", "sonnet", "opus"],
+  "banned_models": ["fable"],
+  "volume_stages": ["triage", "collect", "prescreen"],
+  "judgment_stage": "score",
+  "judgment_hold_days": 14,
+  "default_bounds": {
+    "searches": {"min": 50, "max": 200, "max-daily-shift": "20%"},
+    "daily-cap": {"min": 10, "max": 60},
+    "cadence": ["daily", "alternate", "weekly", "parked"],
+    "models": ["haiku", "sonnet", "opus"],
+    "exploration-share": "15%"
+  },
+  "diagnosis": {
+    "blocked_share": 0.5,
+    "source_min_examined_per_run": 20,
+    "source_max_candidate_rate": 0.1,
+    "source_repeat_drop_share": 0.5,
+    "source_repeat_keys": ["overlap", "kill_list"],
+    "triage_min_candidates_per_run": 5,
+    "triage_max_pass_rate": 0.1,
+    "triage_cluster_share": 0.5,
+    "seasonality_filter": "filter3",
+    "judgment_min_pass_rate": 0.1,
+    "judgment_min_scored": 3,
+    "judgment_max_floor_rate": 0.1,
+    "review_min_at_floor": 3,
+    "review_min_kills": 2,
+    "review_kill_share": 0.67,
+    "cost_units_ratio": 1.5,
+    "propose_after_failed_method": 2,
+    "over_performer_ratio": 2.0,
+    "over_performer_min_top20": 1
+  },
+  "levers": {
+    "about": "Rule 12: under structural_min_runs passing runs a strategy is a small sample. budget and cadence still apply; model, gates, method and skills are proposed only. A grant may lower it with structural-min-runs.",
+    "structural": ["model", "gates", "method", "skills"],
+    "structural_min_runs": 7
+  },
+  "reserve": {
+    "about": "Pool minus what the regular strategies are allocated. Never redistributed to existing strategies; only these consumers draw on it, in this order.",
+    "consumers": ["experiment", "new-strategy"],
+    "new_strategy_runs": 3,
+    "new_strategy_days": 14
+  },
+  "experiment": {
+    "baseline_runs": 3,
+    "treatment_runs": 3,
+    "keep_delta_percent": 10,
+    "survivors_not_fewer": true,
+    "higher_cost_percent": 10,
+    "extend_runs": 2
+  }
+}

@@ -18,7 +18,7 @@ from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 DAYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
 

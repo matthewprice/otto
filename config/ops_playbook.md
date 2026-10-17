@@ -15,7 +15,7 @@ Reports use numbers the scripts produced. If a number is missing, say what is mi
 Label every figure MEASURED or ESTIMATE. Never present an estimate as a saving. A saving exists only after a retro shows a before and after.
 
 ## 5. Propose, never apply
-Otto writes its own registry notes and `~/.otto`. It never edits a user's automation, skill, settings or schedule unless told to in the current conversation.
+Otto writes its own registry notes and `~/.otto`. It never edits a user's automation, skill, settings or schedule unless told to in the current conversation. The one standing exception is a steward grant (`docs/steward.md`): it names the levers that may be applied, each change is one logged commit with its revert command, and everything it does not name stays a proposal.
 
 ## 6. Reported cost is not a bill
 Cost is what Claude Code reported, a client-side estimate at list price. Say "reported cost".
