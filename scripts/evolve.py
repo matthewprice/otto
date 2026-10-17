@@ -386,7 +386,10 @@ def propose(home: Path, g: Optional["steward.Grant"] = None, now: Optional[datet
         else:
             held.append(dict(picked[first_fleet], held="ranked below strategy experiments; runs after them"))
             picked = [c for c in picked if c["scope"] != "fleet"]
-    return {"mode": g.mode, "candidates": picked, "held": held, "propose_strategy": new_strategy,
+    # At most two new-strategy proposals at a time; the strongest evidence first (failed method
+    # experiments, then over-performance).
+    new_strategy.sort(key=lambda x: (x["leak"] != "source", x["from"]))
+    return {"mode": g.mode, "candidates": picked, "held": held, "propose_strategy": new_strategy[:2],
             "label": "expected_gain is an ESTIMATE used for ranking only; nothing here is measured",
             "next": "for each candidate the client writes the change, commits it, then runs evolve.py start with the hash"}
 
