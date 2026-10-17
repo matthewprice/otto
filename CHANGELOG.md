@@ -3,7 +3,7 @@
 ## 0.2.0 (unreleased)
 - Steward mode, opt-in and off by default: a grant (`config/steward.template.md`, in `~/.otto/otto.md` or a repo file passed as `--grant`) names the levers Otto may apply; everything else stays a proposal (docs/steward.md)
 - `yield.py`: a yield ledger of strategy runs and outcomes in `OTTO_HOME/yield/`, an allowlist of numbers and short labels, with a funnel report, points per 100 searches and per run-unit, smoothing, and small-sample flags
-- `allocate.py`: tomorrow's searches, daily cap, cadence and stage models within the grant's bounds and the pool; writes only `allocation.json`
+- `allocate.py`: tomorrow's searches, daily cap, cadence and stage models within the grant's bounds and the pool; writes only `allocation.json`. Pool slack is an explicit reserve that funds only experiments in progress and newly approved strategies; the rest stays unspent
 - `diagnose.py`: the leak per strategy (source, triage, judgment, review, cost, blocked) and the matching lever
 - `evolve.py`: one-change experiments with a yield or review-quality metric, keep, revert or extend verdicts, and the exact git command; never runs git
 - `steward.py`: the grant loader, pause check and nightly or weekly runner; `steward_rules.json` holds the points table and thresholds

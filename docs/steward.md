@@ -98,11 +98,13 @@ The funnel says where a strategy loses opportunities, and each stage maps to one
 `allocate.py plan --pool N` reads the yield report, the diagnosis, the grant's bounds and the current settings per strategy (a JSON file the client writes), and produces tomorrow's plan:
 
 1. Cadence: 5 consecutive runs below a quarter of the fleet median moves a strategy to alternate days; 10 parks it. A parked or blocked strategy gets nothing.
-2. Shares: a softmax over smoothed yield.
-3. Exploration floor: the exploration share of the pool is split across strategies with fewer than 7 runs, and none of them gets less than its part.
-4. Clip: every other move is at most the daily shift bound and inside the searches bounds.
+2. Reserve consumers: a strategy with an experiment collecting, and a newly approved strategy, are set aside for the reserve (below).
+3. Shares: a softmax over smoothed yield for the rest.
+4. Clip: every move is at most the daily shift bound and inside the searches bounds.
 5. Pool: the total never exceeds the pool.
 6. Models: changed only by the diagnosis, never above the ceiling. Volume stages never leave the lowest tier.
+
+**The reserve.** Whatever the bounds leave of the pool is reported as `reserve` (pool minus what the regular strategies were allocated) and is never redistributed to existing strategies. More volume on the same sources is the failure the Steward exists to stop, so slack does not become extra searches for whoever is already running. Only two consumers may draw on it, in this order: a strategy with an experiment collecting treatment runs gets the grant's searches maximum for those runs, and a newly approved strategy (its first run within its last 7) is funded at its exploration floor. If the reserve is short they are clipped in that order. The rest stays unspent, and the plan says so in one line. The rule is visible in `steward_rules.json` as `reserve.consumers`.
 
 It writes `OTTO_HOME/allocation.json` and prints the plan, with each change marked `apply` only when the grant names its lever and this is not a dry run. Otto applies nothing himself; the client applies the plan, one commit per change.
 
@@ -132,4 +134,5 @@ One experiment per strategy and one fleet-wide at a time, because a fleet-wide c
 - At most one experiment per strategy and one fleet-wide; at most two open strategy proposals.
 - Never: create or delete a strategy, raise a pool, exceed the model ceiling, touch the rubric, kill list, recommendation, index or archive, queue a review, or send anything outside the repo.
 - Small samples are named as such; no allocation move larger than the daily shift bound; no park before 10 runs below the line.
+- Pool slack is a reserve for experiments and new strategies only; it is never handed to existing strategies.
 - Every figure is labelled: funnel counts are MEASURED, run-units and shares are ESTIMATE.

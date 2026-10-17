@@ -9,4 +9,4 @@ Script: `python3 "${CLAUDE_PLUGIN_ROOT}/scripts/allocate.py" plan --pool N --jso
 
 Report one line per strategy: searches now and tomorrow, share, cadence, the leak, and the script's reason. List model changes separately. Say for each change whether it is marked `apply` (the grant names its lever) or propose only. Shares are an ESTIMATE produced by a rule; never call one a result.
 
-The script writes only `allocation.json` in OTTO_HOME. It applies nothing; the person's client does. If the total is below the pool, say so; it is not a shortfall. End with an Ops read.
+The script writes only `allocation.json` in OTTO_HOME. It applies nothing; the person's client does. Report the reserve line as the script prints it: what experiments and new strategies drew, and what stays unspent. Unspent reserve is by design, not a shortfall; never suggest giving it to existing strategies. End with an Ops read.

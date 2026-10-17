@@ -146,6 +146,8 @@ Fifteen thin skills (nineteen with steward mode), one agent, five hooks, one bac
 
 Off by default. If you run a fleet of scheduled discovery jobs and want Otto to move budget toward the ones that produce, you can grant him named levers: budget, cadence, model per stage, gates, a strategy's method, or a persona skill's wording. He then measures every run as a funnel, plans tomorrow's searches and cadence inside bounds you set and never above your pools, diagnoses where each strategy leaks, and runs one change at a time as a measured experiment that reverts itself when it does not pay.
 
+Unused pool is never handed to the strategies already running, since more volume on the same sources is exactly the failure he exists to stop. It is kept as a reserve that funds only experiments in progress and newly approved strategies, and whatever they do not need stays unspent.
+
 He applies only what the grant names. Everything else stays a proposal, and he never creates or deletes a strategy, raises a pool, or touches a rubric. Every applied change is one commit, logged with the command that reverts it. A pause file stops him outright. Four skills drive it: `/otto:yield`, `/otto:allocate`, `/otto:evolve` and `/otto:steward`. The grant template is [config/steward.template.md](config/steward.template.md) and the design is [docs/steward.md](docs/steward.md).
 
 ---
