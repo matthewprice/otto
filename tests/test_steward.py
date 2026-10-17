@@ -381,6 +381,62 @@ class Allocation(unittest.TestCase):
             self.assertEqual(Y.report(h, 30, NOW)["strategies"]["y5"]["sample"], "small")  # smoothing flags unchanged
             self.assertLessEqual(p["total_searches"], 600)
 
+    def _cost_home(self, t, x_runs):
+        h = Path(t)
+        rows = []
+        for name in ("a", "b"):
+            rows += [run_row(name, i, 25 - i, scored=1) for i in range(1, 11)]
+        rows += [run_row("x", i, 25 - i, scored=6, at_floor=1, prescreen_pass=6, candidates=8, run_units=6.0) for i in range(1, x_runs + 1)]
+        Y.ingest(h, rows)
+        sp = h / "settings.json"
+        st = {n: {"searches": 100, "daily_cap": 30, "schedule": "daily", "status": "running", "stages": {"triage": "haiku", "score": "opus"}}
+              for n in ("a", "b", "x")}
+        sp.write_text(json.dumps(st))
+        return h, steward.grant(str(write_grant(t)), h, h), str(sp)
+
+    def test_small_sample_cost_leak_applies_budget_and_proposes_model(self):
+        with tempfile.TemporaryDirectory() as t:
+            h, g, sp = self._cost_home(t, 6)
+            d = diagnose.report(h, 30, NOW, g)["strategies"]["x"]
+            self.assertEqual(d["leak"], "cost"); self.assertTrue(d["tentative"])
+            acts = {a["lever"]: a for a in d["actions"]}
+            self.assertTrue(acts["budget"]["allowed"])
+            self.assertFalse(acts["model"]["allowed"])
+            self.assertEqual(acts["model"]["grant"], "tentative: 6 runs, structural changes apply at 7")
+            x = allocate.plan(h, 600, g, sp, now=NOW, write=False)["strategies"]["x"]
+            fields = {c["field"]: c for c in x["changes"]}
+            self.assertIn("searches", fields); self.assertTrue(fields["searches"]["apply"])
+            self.assertNotIn("stages", fields)
+            self.assertEqual(x["stages"], {"triage": "haiku", "score": "opus"})
+            self.assertEqual([c["field"] for c in x["proposed"]], ["stages"])
+            self.assertEqual(x["proposed"][0]["to"]["score"], "sonnet")
+            self.assertIn("tentative: 6 runs", x["proposed"][0]["grant"])
+
+    def test_full_sample_cost_leak_applies_both(self):
+        with tempfile.TemporaryDirectory() as t:
+            h, g, sp = self._cost_home(t, 7)
+            d = diagnose.report(h, 30, NOW, g)["strategies"]["x"]
+            self.assertEqual(d["leak"], "cost")
+            self.assertTrue(all(a["allowed"] for a in d["actions"] if a["lever"] in ("budget", "model")))
+            x = allocate.plan(h, 600, g, sp, now=NOW, write=False)["strategies"]["x"]
+            fields = {c["field"]: c for c in x["changes"]}
+            self.assertTrue(fields["searches"]["apply"]); self.assertTrue(fields["stages"]["apply"])
+            self.assertEqual(x["stages"]["score"], "sonnet"); self.assertEqual(x["proposed"], [])
+
+    def test_grant_can_lower_structural_threshold(self):
+        with tempfile.TemporaryDirectory() as t:
+            h, _, sp = self._cost_home(t, 6)
+            g = steward.grant(str(write_grant(t, GRANT.replace("  pools:", "  structural-min-runs: 5\n  pools:"))), h, h)
+            self.assertEqual(g.structural_min_runs(), 5)
+            x = allocate.plan(h, 600, g, sp, now=NOW, write=False)["strategies"]["x"]
+            self.assertIn("stages", [c["field"] for c in x["changes"]])
+
+    def test_park_needs_a_full_sample(self):
+        self.assertEqual(allocate._cadence("daily", 10, self.g, small=True)[0], "alternate")
+        self.assertEqual(allocate._cadence("alternate", 12, self.g, small=True)[0], "alternate")
+        self.assertEqual(allocate._cadence("daily", 5, self.g, small=True)[0], "alternate")
+        self.assertEqual(allocate._cadence("daily", 10, self.g, small=False)[0], "parked")
+
     def test_reserve_rule_is_visible(self):
         r = steward.load_rules()["reserve"]
         self.assertEqual(r["consumers"], ["experiment", "new-strategy"])
