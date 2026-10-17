@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+- Steward mode, opt-in and off by default: a grant (`config/steward.template.md`, in `~/.otto/otto.md` or a repo file passed as `--grant`) names the levers Otto may apply; everything else stays a proposal (docs/steward.md)
+- `yield.py`: a yield ledger of strategy runs and outcomes in `OTTO_HOME/yield/`, an allowlist of numbers and short labels, with a funnel report, points per 100 searches and per run-unit, smoothing, and small-sample flags
+- `allocate.py`: tomorrow's searches, daily cap, cadence and stage models within the grant's bounds and the pool; writes only `allocation.json`
+- `diagnose.py`: the leak per strategy (source, triage, judgment, review, cost, blocked) and the matching lever
+- `evolve.py`: one-change experiments with a yield or review-quality metric, keep, revert or extend verdicts, and the exact git command; never runs git
+- `steward.py`: the grant loader, pause check and nightly or weekly runner; `steward_rules.json` holds the points table and thresholds
+- Four skills: `/otto:yield`, `/otto:allocate`, `/otto:evolve`, `/otto:steward`; the Otto agent says when steward mode is on
+- `experiment.py` shares its baseline and median helpers with `evolve.py` through `exp_common.py`; its CLI is unchanged
+- Fixtures gain a synthetic yield month for six strategies; `tests/test_steward.py`
+
 ## 0.1.0 (unreleased)
 - Registry, ledger, health, budget, retro, audit scripts
 - Guarded runner with breaker, attempt cap and idempotency
