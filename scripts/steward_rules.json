@@ -48,6 +48,11 @@
     "over_performer_ratio": 2.0,
     "over_performer_min_top20": 1
   },
+  "reserve": {
+    "about": "Pool minus what the regular strategies are allocated. Never redistributed to existing strategies; only these consumers draw on it, in this order.",
+    "consumers": ["experiment", "new-strategy"],
+    "new_strategy_runs": 7
+  },
   "experiment": {
     "baseline_runs": 3,
     "treatment_runs": 3,

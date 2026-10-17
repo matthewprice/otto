@@ -238,6 +238,9 @@ def start(home: Path, g: "steward.Grant", target: str, lever: str, hypothesis: s
            "baseline": _baseline(home, target_s, metric, cfg["baseline_runs"], now, g.rules.get("points") or {}),
            "treatment": {"runs": 0, "needed": cfg["treatment_runs"]}, "keep_if": cfg["keep_if"],
            "applied_under": "grant" if ok else "the person (%s)" % why}
+    if not fleet:
+        rec["funding"] = ("treatment runs are funded from the allocation reserve at the grant's searches max (%d per run), "
+                          "not from other strategies" % g.bounds("searches")["max"])
     if isinstance(empty_runs, int):
         rec["restore"] = {"empty-runs-so-far": empty_runs}
     if rec["baseline"]["runs"] < cfg["baseline_runs"]:

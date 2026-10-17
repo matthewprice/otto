@@ -13,16 +13,21 @@ strategy. The settings file is written by the client:
 Procedure, in order:
   1. Cadence. 5 consecutive runs below a quarter of the fleet median: alternate days. 10: parked.
      A parked strategy, a blocked one (diagnosis) or one not running or ready gets nothing.
-  2. Shares. A softmax over smoothed yield, each divided by the best live strategy's yield first,
-     at the temperature in steward_rules.json.
-  3. Exploration floor. The exploration share of the pool is split evenly across live strategies
-     with fewer than 7 runs; none of them is given less than its part.
+  2. Reserve consumers. A strategy with a steward experiment collecting treatment runs, and a
+     newly approved strategy (its first run within its last 7, running or ready), are taken out of the softmax
+     pass. Their needs (the grant's searches max for an experiment; the exploration floor, the
+     exploration share of the pool split evenly, for a new strategy) are set aside first.
+  3. Shares. A softmax over the smoothed yield of the remaining strategies, each divided by the
+     best one's yield first, at the temperature in steward_rules.json.
   4. Clip. Every move is at most the daily shift bound from today's searches, and inside the
-     grant's searches bounds. The exploration floor outranks the shift bound: a small-sample
-     strategy is lifted to its floor in one step, and never below it, up to the searches maximum.
-  5. Pool. The total never exceeds --pool. If the clipped plan is over, the excess comes off the
-     strategies with room above their lower limits, largest first.
-  6. Models, from the diagnosis only: a judgment leak moves the score stage up one tier, a cost
+     grant's searches bounds.
+  5. Budget. The regular strategies stay inside the pool minus the set-aside; if their lower
+     limits alone exceed the pool, they are scaled down pro rata.
+  6. Reserve. reserve = pool minus what the regular strategies were allocated. It pays only its
+     two consumers, in order: experiments first, then new strategies, each clipped to what is
+     left. The rest stays unspent. Slack is never redistributed to existing strategies: more
+     volume on the same sources is the failure the Steward exists to stop.
+  7. Models, from the diagnosis only: a judgment leak moves the score stage up one tier, a cost
      leak moves the non-volume stages down one. Volume stages never leave the lowest tier, and no
      stage is ever above the grant's model ceiling.
 
@@ -42,6 +47,7 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import exp_common as xc  # noqa: E402
 import otto_common as oc  # noqa: E402
 import steward  # noqa: E402
 
@@ -67,6 +73,25 @@ def load_settings(home: Path, path: Optional[str], yrep: Dict[str, Any]) -> Tupl
         out[name] = {"searches": last.get("searches"), "daily_cap": None, "schedule": "daily", "status": "running",
                      "stages": dict(last.get("stages") or {})}
     return out, "derived from the last run rows (no settings file)"
+
+
+def reserve_consumers(rules: Dict[str, Any]) -> List[str]:
+    """The reserve's consumers from steward_rules.json. Only the two known kinds count; a client may
+    narrow the list, never add to it."""
+    raw = (rules.get("reserve") or {}).get("consumers")
+    known = ["experiment", "new-strategy"]
+    if not isinstance(raw, list):
+        return known
+    return [k for k in known if k in [str(x) for x in raw]]
+
+
+def active_experiment_targets(home: Path) -> set:
+    """Strategies with a steward experiment collecting treatment runs (fleet-wide ones excluded)."""
+    out = set()
+    for _, rec in xc.iter_records(home, "steward"):
+        if rec.get("status") in ("collecting", "extended") and rec.get("scope") != "fleet" and rec.get("target"):
+            out.add(str(rec["target"]))
+    return out
 
 
 def softmax(xs: List[float], temperature: float = 1.0) -> List[float]:
@@ -213,64 +238,93 @@ def plan(home: Path, pool: int, g: Optional["steward.Grant"] = None, settings_pa
         else:
             takers.append(n)
 
-    # 2. shares
-    # Yields are divided by the best taker's yield, so the softmax sees 0..1 whatever the units.
-    filled = {n: (rows[n]["smoothed_yield"] if rows[n]["smoothed_yield"] is not None else (fleet_med or 0.0)) for n in takers}
+    # 2. who draws on the reserve instead of the softmax pass
+    consumers = reserve_consumers(rules)
+    exp_targets = active_experiment_targets(home) if "experiment" in consumers else set()
+    exp_draw = [n for n in takers if n in exp_targets]
+    # New: its first run is within its last 7 runs, counted over all time, not just the window.
+    ylib = steward.load_script("yield")
+    for n in takers:
+        rows[n]["runs_ever"] = len(ylib.read_runs(home, until=now, strategy=n))
+    new_n = int((rules.get("reserve") or {}).get("new_strategy_runs", 7))
+    new_draw = [n for n in takers if "new-strategy" in consumers and n not in exp_targets and rows[n]["runs_ever"] <= new_n]
+    regular = [n for n in takers if n not in exp_draw and n not in new_draw]
+    floor_each = (explore * pool / len(new_draw)) if new_draw else 0.0
+    need = {n: float(sb["max"]) for n in exp_draw}
+    need.update({n: min(float(sb["max"]), floor_each) for n in new_draw})
+    # The consumers' needs are set aside before the softmax pass, so the regular strategies cannot
+    # squeeze them out; the regular pass is still held to its own bounds.
+    regular_budget = max(0, pool - int(math.ceil(sum(need.values()))))
+
+    # 3. shares, over the regular strategies only
+    # Yields are divided by the best regular strategy's yield, so the softmax sees 0..1 whatever the units.
+    filled = {n: (rows[n]["smoothed_yield"] if rows[n]["smoothed_yield"] is not None else (fleet_med or 0.0)) for n in regular}
     scale = max(list(filled.values()) + [0.0]) or 1.0
-    ys_ = [filled[n] / scale for n in takers]
-    sm = softmax(ys_, float(rules.get("softmax_temperature", 1.0)))
-    shares = {n: s for n, s in zip(takers, sm)}
-    # 3. exploration floor
-    smalls = [n for n in takers if rows[n]["runs"] < small_n]
-    floors = {n: explore / len(smalls) for n in smalls} if smalls else {}
-    shares = apply_floor(shares, floors) if floors else shares
+    sm = softmax([filled[n] / scale for n in regular], float(rules.get("softmax_temperature", 1.0)))
+    shares = {n: x for n, x in zip(regular, sm)}
 
     # 4. clip
     lower: Dict[str, int] = {}
-    for n in takers:
+    for n in regular:
         r = rows[n]
-        target = shares[n] * pool
+        target = shares[n] * regular_budget
         cur = r["searches_now"]
         lo, hi = float(sb["min"]), float(sb["max"])
         if cur is not None and cur > 0:
             lo = max(lo, cur * (1 - shift))
             hi = min(hi, cur * (1 + shift))
-        floor_s = floors.get(n, 0.0) * pool
         lo = min(lo, hi)
-        if n in floors:
-            # The exploration floor is a guarantee: it outranks the shift bound (a new strategy may
-            # jump to its floor in one night) but never the grant's searches maximum.
-            lo = max(lo, min(floor_s, float(sb["max"])))
-            hi = max(hi, lo)
         v = min(max(target, lo), hi)
         r["share_target"] = round(shares[n], 4)
-        r["searches"] = int(math.ceil(v)) if n in floors else int(math.floor(v))
+        r["searches"] = int(math.floor(v))
         lower[n] = int(math.ceil(lo))
-        if n in floors:
-            r["floor_searches"] = int(math.ceil(floor_s))
-            r["reasons"].append("small sample (%d runs): held at or above its exploration floor of %d" % (r["runs"], math.ceil(floor_s)))
         if cur is not None and abs(v - target) > 0.5:
             r["reasons"].append("clipped from %d to %d by the %d%% daily shift bound and the searches bounds" % (round(target), r["searches"], round(shift * 100)))
 
-    # 5. pool
-    total = sum(rows[n]["searches"] for n in takers)
+    # 5. the regular strategies against their budget, then against the pool
     pool_note = None
-    if total > pool:
-        excess = total - pool
-        for n in sorted(takers, key=lambda k: -(rows[k]["searches"] - lower[k])):
+    total = sum(rows[n]["searches"] for n in regular)
+    if total > regular_budget:
+        excess = total - regular_budget
+        for n in sorted(regular, key=lambda k: -(rows[k]["searches"] - lower[k])):
             if excess <= 0:
                 break
-            room = max(0, rows[n]["searches"] - max(lower[n], 0))
-            take = min(room, excess)
+            take = min(max(0, rows[n]["searches"] - max(lower[n], 0)), excess)
             if take:
                 rows[n]["searches"] -= take
-                rows[n]["reasons"].append("trimmed %d to keep the total inside the pool" % take)
+                rows[n]["reasons"].append("trimmed %d to keep the reserve's set-aside whole" % take)
                 excess -= take
-        if excess > 0:  # the lower limits alone exceed the pool: the pool wins, pro rata
-            tot = sum(rows[n]["searches"] for n in takers)
-            for n in takers:
-                rows[n]["searches"] = int(math.floor(rows[n]["searches"] * pool / float(tot))) if tot else 0
-            pool_note = "the pool is below the sum of the lower limits; every strategy was scaled down pro rata and some bounds do not hold"
+    total = sum(rows[n]["searches"] for n in regular)
+    if total > pool:  # the lower limits alone exceed the pool: the pool wins, pro rata
+        for n in regular:
+            rows[n]["searches"] = int(math.floor(rows[n]["searches"] * pool / float(total))) if total else 0
+        pool_note = "the pool is below the sum of the lower limits; every regular strategy was scaled down pro rata and some bounds do not hold"
+    allocated = sum(rows[n]["searches"] for n in regular)
+
+    # 6. the reserve: pool minus what the regular strategies were allocated. Only two consumers may
+    # draw on it, in this order: experiment treatment runs, then newly approved strategies. Each is
+    # clipped to what is left. The rest is never redistributed.
+    reserve = max(0, pool - allocated)
+    left = reserve
+    drawn = {"experiment": 0, "new-strategy": 0}
+    for kind, names_ in (("experiment", exp_draw), ("new-strategy", new_draw)):
+        for n in names_:
+            r = rows[n]
+            want = int(math.ceil(need[n]))
+            got = min(want, left)
+            left -= got
+            drawn[kind] += got
+            r["searches"] = got
+            r["funded_from"] = "reserve"
+            r["reserve_consumer"] = kind
+            if kind == "experiment":
+                r["reasons"].append("experiment collecting: treatment runs funded from the reserve at searches max %d%s" % (
+                    int(sb["max"]), "" if got >= want else ", clipped to %d (reserve short)" % got))
+            else:
+                r["floor_searches"] = want
+                r["reasons"].append("new strategy (%d runs ever): funded from the reserve at its exploration floor of %d%s" % (
+                    r["runs_ever"], want, "" if got >= want else ", clipped to %d (reserve short)" % got))
+    unspent = left
     total = sum(rows[n]["searches"] for n in rows)
 
     # daily cap, models, share, change list
@@ -309,6 +363,9 @@ def plan(home: Path, pool: int, g: Optional["steward.Grant"] = None, settings_pa
            "settings_source": settings_src, "fleet_median_yield_per_unit": fleet_med,
            "strategies": {n: rows[n] for n in sorted(rows, key=lambda k: (-rows[k]["searches"], k))},
            "pool_note": pool_note,
+           "allocated_regular": allocated, "reserve": reserve, "reserve_drawn": drawn, "reserve_unspent": unspent,
+           "reserve_consumers": consumers,
+           "reserve_note": ("%d of the reserve stays unspent: slack is never redistributed to existing strategies" % unspent) if unspent else None,
            "label": "ESTIMATE: shares are a rule applied to MEASURED funnel counts and ESTIMATE run-units; nothing here is a result",
            "applies": "nothing; the client applies the changes marked apply: true, one logged commit each"}
     if write:
@@ -325,6 +382,12 @@ def render(p: Dict[str, Any]) -> str:
         for c in r["changes"]:
             if c["field"] == "stages":
                 L.append("    stages %s -> %s [%s]" % (json.dumps(c["from"], sort_keys=True), json.dumps(c["to"], sort_keys=True), "apply" if c["apply"] else "propose: " + c["grant"]))
+    if "reserve" in p:
+        d = p.get("reserve_drawn") or {}
+        L.append("reserve: %d (pool %d minus %d allocated); drawn %d by experiments, %d by new strategies" % (
+            p["reserve"], p["pool"], p["allocated_regular"], d.get("experiment", 0), d.get("new-strategy", 0)))
+        if p.get("reserve_note"):
+            L.append(p["reserve_note"] + ".")
     if p.get("pool_note"):
         L.append("note: " + p["pool_note"])
     L.append(p["label"])
