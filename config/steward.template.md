@@ -39,6 +39,9 @@ steward:
     on-fail: revert
     # At most this many experiments collecting at once. A fleet-wide one pauses strategy ones.
     max-active: {per-strategy: 1, fleet-wide: 1}
+  # Optional: runs a strategy needs before model, gates, method or skills changes apply to it
+  # (default 7, playbook rule 12). Budget and cadence move on any sample.
+  # structural-min-runs: 7
   # Optional: override the yield points table in scripts/steward_rules.json.
   # metric-points:
   #   archived: 0

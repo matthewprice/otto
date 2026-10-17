@@ -35,6 +35,7 @@ import otto_common as oc  # noqa: E402
 
 RULES_PATH = Path(__file__).resolve().parent / "steward_rules.json"
 LEVERS = ("budget", "cadence", "model", "gates", "method", "skills")
+STRUCTURAL = ("model", "gates", "method", "skills")  # rule 12: these wait for a full sample
 # Actions no grant can turn on. requires-approval in the grant may only add to this list.
 NEVER = ("create-strategy", "delete-strategy", "raise-pool", "edit-rubric", "edit-kill-list",
          "edit-recommendation", "edit-archive", "queue-review")
@@ -197,6 +198,25 @@ class Grant:
             return False, "%s is not in the grant's levers; propose only" % lever
         return True, "granted"
 
+    def structural_min_runs(self) -> int:
+        """Runs a strategy needs before a structural lever applies to it. The rule in
+        steward_rules.json, unless the grant sets structural-min-runs (at least 1)."""
+        base = (self.rules.get("levers") or {}).get("structural_min_runs", 7)
+        v = self.data.get("structural-min-runs")
+        try:
+            return max(1, int(v)) if v is not None and not isinstance(v, bool) else int(base)
+        except (TypeError, ValueError):
+            return int(base)
+
+    def why_for(self, lever: str, runs: Optional[int]) -> Tuple[bool, str]:
+        """why() for one strategy: on a small sample, structural levers drop to propose."""
+        ok, why = self.why(lever)
+        structural = (self.rules.get("levers") or {}).get("structural") or list(STRUCTURAL)
+        m = self.structural_min_runs()
+        if ok and lever in structural and runs is not None and runs < m:
+            return False, "tentative: %d runs, structural changes apply at %d" % (runs, m)
+        return ok, why
+
     # -- bounds
     def bounds(self, key: str) -> Any:
         """A bound from the grant, else the default in steward_rules.json. Percent strings become
@@ -266,6 +286,7 @@ class Grant:
                 "never": list(NEVER), "paused": self.paused(),
                 "bounds": {k: self.bounds(k) for k in ("searches", "daily-cap", "cadence", "models", "exploration-share")},
                 "model_ceiling": self.model_ceiling(), "max_active": self.max_active(),
+                "structural_min_runs": self.structural_min_runs(),
                 "pools": str(self.path("pools")) if self.path("pools") else None,
                 "log": str(self.path("log")) if self.path("log") else None,
                 "pause": str(self.pause_path()) if self.pause_path() else None,

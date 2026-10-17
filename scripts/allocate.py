@@ -31,7 +31,11 @@ Procedure, in order:
      left; one that cannot get searches.min is marked unfunded with no change proposed. The rest
      stays unspent. Slack is never redistributed to existing strategies: more
      volume on the same sources is the failure the Steward exists to stop.
-  7. Models, from the diagnosis only: a judgment leak moves the score stage up one tier, a cost
+  7. Rule 12. Under levers.structural_min_runs runs (7; a grant may lower it) a strategy's
+     searches, daily cap and cadence still move, but a model change is listed under `proposed`,
+     never in `changes`, and its stages stay as they are. Parking also needs a full sample;
+     alternate days may apply earlier.
+  8. Models, from the diagnosis only: a judgment leak moves the score stage up one tier, a cost
      leak moves the non-volume stages down one. Volume stages never leave the lowest tier, and no
      stage is ever above the grant's model ceiling.
 
@@ -173,12 +177,14 @@ def plan_models(stages: Dict[str, str], leak: str, g: "steward.Grant") -> Tuple[
     return new, why
 
 
-def _cadence(cur: str, below: int, g: "steward.Grant") -> Tuple[str, Optional[str]]:
+def _cadence(cur: str, below: int, g: "steward.Grant", small: bool = False) -> Tuple[str, Optional[str]]:
     r = g.rules
     allowed = g.bounds("cadence") or ["daily", "alternate", "weekly", "parked"]
     park_n, alt_n = int(r.get("park_runs", 10)), int(r.get("demote_alternate_runs", 5))
-    if below >= park_n and "parked" in allowed:
+    if below >= park_n and "parked" in allowed and not small:
         return "parked", "%d consecutive runs below a quarter of the fleet median: park" % below
+    if below >= park_n and small and cur == "daily" and "alternate" in allowed:
+        return "alternate", "%d consecutive runs below a quarter of the fleet median: alternate days (parking waits for a full sample)" % below
     if below >= alt_n and cur == "daily" and "alternate" in allowed:
         return "alternate", "%d consecutive runs below a quarter of the fleet median: alternate days" % below
     if below == 0 and cur == "alternate" and "daily" in allowed:
@@ -228,7 +234,7 @@ def plan(home: Path, pool: int, g: Optional["steward.Grant"] = None, settings_pa
         elif r["leak"] in ("blocked", "no-data") or r["status"] not in LIVE:
             sched, why = r["schedule_now"], None  # no yield to judge a cadence by
         else:
-            sched, why = _cadence(r["schedule_now"], r["runs_below_median"], g)
+            sched, why = _cadence(r["schedule_now"], r["runs_below_median"], g, small=r["sample"] == "small")
         r["schedule"] = sched
         if why:
             r["reasons"].append(why)
@@ -396,15 +402,24 @@ def plan(home: Path, pool: int, g: Optional["steward.Grant"] = None, settings_pa
         r["reasons"].extend(why)
         r["share"] = round((r["searches"] or 0) / float(pool), 4) if pool else 0.0
         changes = []
+        r["proposed"] = []
         for key, old, new in (("searches", r["searches_now"], r["searches"]), ("daily_cap", r["daily_cap_now"], r["daily_cap"]),
                               ("schedule", r["schedule_now"], r["schedule"]), ("stages", r["stages_now"], r["stages"])):
             if key == "searches" and new is None:
                 continue  # unfunded: no searches change proposed
             if old != new:
                 lever = LEVER_FOR[key]
-                ok, gwhy = g.why(lever)
-                changes.append({"field": key, "from": old, "to": new, "lever": lever, "apply": bool(ok and not dry_run),
-                                "grant": "dry run" if (ok and dry_run) else gwhy})
+                ok, gwhy = g.why_for(lever, r["runs"])
+                item = {"field": key, "from": old, "to": new, "lever": lever, "apply": bool(ok and not dry_run),
+                        "grant": "dry run" if (ok and dry_run) else gwhy}
+                if not ok and gwhy.startswith("tentative:"):
+                    # Rule 12: a structural change on a small sample is proposed only, never written
+                    # into changes, and the plan keeps the current value.
+                    r["proposed"].append(item)
+                    r[key] = old
+                    r["reasons"].append("%s change proposed only (%s)" % (key, gwhy))
+                    continue
+                changes.append(item)
         r["changes"] = changes
         if not r["reasons"]:
             r["reasons"].append("share follows yield" if not r.get("exclude") else r["exclude"])
@@ -435,7 +450,7 @@ def render(p: Dict[str, Any]) -> str:
     for n, r in p["strategies"].items():
         L.append("%-14s %8s %6s %5d%% %-10s %-9s %s" % (n[:14], "held" if r["searches"] is None else r["searches"], "-" if r["searches_now"] is None else r["searches_now"],
                                                      round(r["share"] * 100), r["schedule"], r["leak"], r["reason"]))
-        for c in r["changes"]:
+        for c in r["changes"] + r.get("proposed", []):
             if c["field"] == "stages":
                 L.append("    stages %s -> %s [%s]" % (json.dumps(c["from"], sort_keys=True), json.dumps(c["to"], sort_keys=True), "apply" if c["apply"] else "propose: " + c["grant"]))
     if "reserve" in p:

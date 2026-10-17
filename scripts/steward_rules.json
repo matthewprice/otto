@@ -48,6 +48,11 @@
     "over_performer_ratio": 2.0,
     "over_performer_min_top20": 1
   },
+  "levers": {
+    "about": "Rule 12: under structural_min_runs passing runs a strategy is a small sample. budget and cadence still apply; model, gates, method and skills are proposed only. A grant may lower it with structural-min-runs.",
+    "structural": ["model", "gates", "method", "skills"],
+    "structural_min_runs": 7
+  },
   "reserve": {
     "about": "Pool minus what the regular strategies are allocated. Never redistributed to existing strategies; only these consumers draw on it, in this order.",
     "consumers": ["experiment", "new-strategy"],

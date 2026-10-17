@@ -133,7 +133,7 @@ def report(home: Path, days: int = 30, now: Optional[datetime] = None, g: Option
         c = classify(s, fleet, rules)
         acts = []
         for lever, when in LEVER_OF.get(c["leak"], []):
-            ok, why = g.why(lever)
+            ok, why = g.why_for(lever, s["runs"])  # rule 12: structural levers wait for a full sample
             acts.append({"lever": lever, "when": when, "change": CHANGE_OF.get((c["leak"], lever), ""),
                          "scope": "fleet" if lever == "skills" else "strategy", "allowed": ok, "grant": why})
         if c["leak"] == "source":
