@@ -271,8 +271,8 @@ class Allocation(unittest.TestCase):
             for n in ("s1", "s2"):
                 r = p["strategies"][n]
                 self.assertEqual(r["reserve_consumer"], "new-strategy")
-                self.assertEqual(r["searches"], 45)  # 15% of 600 split across two new strategies
-            self.assertEqual(p["reserve_drawn"]["new-strategy"], 90)
+                self.assertEqual(r["searches"], 50)  # 15% of 600 over two is 45, raised to searches.min 50
+            self.assertEqual(p["reserve_drawn"]["new-strategy"], 100)
             self.assertEqual(p["reserve"], 600 - p["allocated_regular"])
             self.assertLessEqual(p["total_searches"], 600)
 
@@ -292,14 +292,18 @@ class Allocation(unittest.TestCase):
         with tempfile.TemporaryDirectory() as t:
             h, g, sp = self._reserve_home(t)
             evolve.start(h, g, "mid", "method", "new sources", "abcdef1", now=NOW)
-            # big alone holds at least 80 (shift bound from 100); 300 - 80 leaves 220 of reserve
+            # big alone holds at least 80 (shift bound from 100); 300 - 80 leaves 220 of reserve:
+            # the experiment takes 200, 20 is left, below searches.min 50 for either new strategy.
             p = allocate.plan(h, 300, g, sp, now=NOW, write=False)
             s = p["strategies"]
-            self.assertEqual(s["mid"]["searches"], min(200, p["reserve"]))
-            self.assertEqual(s["s1"]["searches"] + s["s2"]["searches"], max(0, p["reserve"] - s["mid"]["searches"]))
-            self.assertLess(s["s1"]["searches"] + s["s2"]["searches"], 2 * 23)
-            self.assertIn("reserve short", s["s2"]["reason"] if s["s2"]["searches"] < 23 else s["s1"]["reason"])
+            self.assertEqual(s["mid"]["searches"], 200)
+            for n in ("s1", "s2"):
+                self.assertIsNone(s[n]["searches"]); self.assertTrue(s[n]["unfunded"])
+                self.assertIn("below searches.min", s[n]["reason"])
+                self.assertNotIn("searches", [c["field"] for c in s[n]["changes"]])
+            self.assertEqual(sorted(p["unfunded"]), ["s1", "s2"])
             self.assertLessEqual(p["total_searches"], 300)
+            self.assertEqual(p["reserve_unspent"], 20)
 
     def test_slack_stays_unspent(self):
         with tempfile.TemporaryDirectory() as t:
@@ -322,8 +326,65 @@ class Allocation(unittest.TestCase):
             p = allocate.plan(h, 600, g, sp, now=NOW, write=False)
             self.assertNotIn("reserve_consumer", p["strategies"]["slow"])
 
+    def test_every_value_inside_min_max_and_zero_only_when_parked_or_blocked(self):
+        for pool in (120, 250, 600, 1200):
+            p = self.plan(pool)
+            for n, r in p["strategies"].items():
+                if r["searches"] is None:
+                    self.assertTrue(r["unfunded"], n)
+                elif r["searches"] == 0:
+                    self.assertTrue(r["schedule"] == "parked" or r["leak"] == "blocked", (pool, n, r["reason"]))
+                else:
+                    self.assertGreaterEqual(r["searches"], 50, (pool, n)); self.assertLessEqual(r["searches"], 200, (pool, n))
+            self.assertLessEqual(p["total_searches"], pool)
+
+    def test_shift_bound_below_min_is_raised_to_min(self):
+        with tempfile.TemporaryDirectory() as t:
+            h, g, sp = self._reserve_home(t, small=(), settings_extra={"mid": {"searches": 40, "schedule": "daily", "status": "running"}})
+            p = allocate.plan(h, 600, g, sp, now=NOW, write=False)
+            self.assertGreaterEqual(p["strategies"]["mid"]["searches"], 50)
+
+    def test_ad_hoc_gets_no_schedule_change(self):
+        with tempfile.TemporaryDirectory() as t:
+            sp = Path(t) / "s.json"
+            st = json.loads((self.home / "strategies.json").read_text())
+            st["subscriptions"]["mode"] = "ad-hoc"
+            st["accelerators"]["mode"] = "ad-hoc"
+            sp.write_text(json.dumps(st))
+            p = allocate.plan(self.home, 600, self.g, str(sp), now=NOW, write=False)
+            for n in ("subscriptions", "accelerators"):
+                r = p["strategies"][n]
+                self.assertEqual(r["schedule"], r["schedule_now"])
+                self.assertNotIn("schedule", [c["field"] for c in r["changes"]])
+
+    def test_young_fleet_still_allocates_most_of_the_pool(self):
+        # Every strategy has 2 to 6 runs: none is newly approved except a 2-run, 3-day-old one.
+        with tempfile.TemporaryDirectory() as t:
+            h = Path(t)
+            rows = []
+            for name, n_runs, first_back, scored in (("y2", 2, 20, 1), ("y3", 3, 20, 2), ("y4", 4, 20, 1), ("y5", 5, 20, 3), ("y6", 6, 20, 2)):
+                rows += [run_row(name, i + 1, first_back - 3 * i, scored=scored) for i in range(n_runs)]
+            rows += [run_row("fresh", 1, 3, scored=0), run_row("fresh", 2, 1, scored=1)]
+            Y.ingest(h, rows)
+            sp = h / "settings.json"
+            sp.write_text(json.dumps({n: {"searches": 100, "daily_cap": 30, "schedule": "daily", "status": "running"}
+                                      for n in ("y2", "y3", "y4", "y5", "y6", "fresh")}))
+            g = steward.grant(str(write_grant(t)), h, h)
+            p = allocate.plan(h, 600, g, str(sp), now=NOW, write=False)
+            s = p["strategies"]
+            self.assertGreaterEqual(p["allocated_regular"], 0.6 * 600, allocate.render(p))
+            self.assertEqual(s["fresh"]["reserve_consumer"], "new-strategy")
+            self.assertEqual(s["fresh"]["searches"], 90)  # 15% of 600, one new strategy
+            for n in ("y2", "y3", "y4", "y5", "y6"):
+                self.assertNotIn("reserve_consumer", s[n], n)  # y2 has 2 runs but its first is 20 days old
+                self.assertGreaterEqual(s[n]["searches"], 50)
+            self.assertEqual(Y.report(h, 30, NOW)["strategies"]["y5"]["sample"], "small")  # smoothing flags unchanged
+            self.assertLessEqual(p["total_searches"], 600)
+
     def test_reserve_rule_is_visible(self):
-        self.assertEqual(steward.load_rules()["reserve"]["consumers"], ["experiment", "new-strategy"])
+        r = steward.load_rules()["reserve"]
+        self.assertEqual(r["consumers"], ["experiment", "new-strategy"])
+        self.assertEqual((r["new_strategy_runs"], r["new_strategy_days"]), (3, 14))
 
     def test_demotion_at_5_and_10(self):
         self.assertEqual(allocate._cadence("daily", 4, self.g)[0], "daily")
