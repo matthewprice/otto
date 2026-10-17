@@ -19,6 +19,9 @@ The funnel says where a strategy loses opportunities. Each stage maps to one lev
             run-units well above it                    down (nightly)
   healthy   none of the above                         none
 
+Only strategies whose settings (--settings, else OTTO_HOME/strategies.json) say status running or
+ready and mode scheduled are diagnosed; ad-hoc and done ones are skipped with one line each.
+
 Thresholds live in steward_rules.json under `diagnosis`. Under seven runs a strategy is a small
 sample; the leak is still named, marked tentative. Exit code 0 always.
 """
@@ -120,7 +123,7 @@ def _pct(x: Optional[float]) -> str:
 
 
 def report(home: Path, days: int = 30, now: Optional[datetime] = None, g: Optional["steward.Grant"] = None,
-           yield_report: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+           yield_report: Optional[Dict[str, Any]] = None, settings_path: Optional[str] = None) -> Dict[str, Any]:
     g = g or steward.grant(None, home)
     rules = g.rules
     th = rules.get("diagnosis") or {}
@@ -129,7 +132,13 @@ def report(home: Path, days: int = 30, now: Optional[datetime] = None, g: Option
     upr = [s["run_units"] / float(s["runs"]) for s in strats.values() if s["runs"] and s["run_units"]]
     fleet = {"median_yield": y.get("fleet_median_yield_per_unit"), "median_units_per_run": oc.median(upr) if upr else None}
     out: Dict[str, Any] = {}
+    settings = steward.load_settings_file(home, settings_path)
+    skipped: Dict[str, str] = {}
     for name, s in strats.items():
+        why_out = steward.eligibility(settings, name)
+        if why_out:
+            skipped[name] = why_out
+            continue
         c = classify(s, fleet, rules)
         acts = []
         for lever, when in LEVER_OF.get(c["leak"], []):
@@ -155,11 +164,11 @@ def report(home: Path, days: int = 30, now: Optional[datetime] = None, g: Option
                          "grant": "the person designs and approves every new strategy",
                          "change": "yield %.1fx the fleet median; propose a sibling strategy on the same hunting ground" % (s["smoothed_yield"] / med)})
         out[name] = {"strategy": name, "leak": c["leak"], "why": c["why"], "evidence": c["evidence"], "actions": acts,
-                     "tentative": s["sample"] == "small", "signals": signals}
+                     "tentative": s["runs"] < g.structural_min_runs(), "signals": signals}
         if c.get("surface"):
             out[name]["surface"] = c["surface"]
     return {"now": y.get("now"), "window_days": days, "mode": g.mode, "fleet": {k: (round(v, 4) if isinstance(v, float) else v) for k, v in fleet.items()},
-            "strategies": out, "order": y["ranked"],
+            "strategies": out, "order": [n for n in y["ranked"] if n in out], "skipped": skipped,
             "basis": "Leaks are read from MEASURED funnel counts against the thresholds in steward_rules.json. A tentative leak rests on fewer than 7 runs."}
 
 
@@ -173,6 +182,8 @@ def render(rep: Dict[str, Any]) -> str:
             L.append("    %s, %s: %s [%s]" % (a["lever"], a["when"], a["change"], "apply" if a["allowed"] else "propose"))
         if d.get("surface"):
             L.append("    surface: " + d["surface"])
+    for name, why in sorted((rep.get("skipped") or {}).items()):
+        L.append("%-16s skipped   %s; not diagnosed" % (name[:16], why))
     return "\n".join(L)
 
 
@@ -180,7 +191,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     common = steward.common_flags()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, parents=[common])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    r = sub.add_parser("report", parents=[common]); r.add_argument("--days", type=int, default=30)
+    r = sub.add_parser("report", parents=[common]); r.add_argument("--days", type=int, default=30); r.add_argument("--settings")
     args = steward.parse_args(ap, argv)
     if args is None:
         return 0
@@ -188,7 +199,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         home = Path(args.home).expanduser() if args.home else oc.otto_home()
         g = steward.grant(args.grant, home)
         now = oc.parse_when(args.now) if args.now else None
-        rep = report(home, args.days, now, g)
+        rep = report(home, args.days, now, g, settings_path=args.settings)
         print(json.dumps(rep, indent=2) if args.json else render(rep))
     except Exception as e:  # fail open
         oc.log_error("diagnose: %s" % e)

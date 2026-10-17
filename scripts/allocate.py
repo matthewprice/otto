@@ -7,7 +7,7 @@ Reads the yield report, the diagnosis, the grant's bounds and the current settin
 Settings come from --settings, else OTTO_HOME/strategies.json, else the last run row of each
 strategy. The settings file is written by the client:
 
-  {"S01": {"searches": 120, "daily_cap": 30, "schedule": "daily", "status": "running",
+  {"alpha": {"searches": 120, "daily_cap": 30, "schedule": "daily", "status": "running",
            "stages": {"triage": "haiku", "score": "sonnet"}, "runs_below_median": 0}}
 
 Procedure, in order:
@@ -199,7 +199,7 @@ def plan(home: Path, pool: int, g: Optional["steward.Grant"] = None, settings_pa
     g = g or steward.grant(None, home)
     rules = g.rules
     yrep = yield_report or steward.load_script("yield").report(home, days, now, rules)
-    drep = diagnosis or steward.load_script("diagnose").report(home, days, now, g, yrep)
+    drep = diagnosis or steward.load_script("diagnose").report(home, days, now, g, yrep, settings_path=settings_path)
     settings, settings_src = load_settings(home, settings_path, yrep)
     sb = g.bounds("searches")
     cb = g.bounds("daily-cap")

@@ -4,10 +4,12 @@
   evolve.py propose [--days 30] [--grant PATH] [--json]
       Candidate experiments from the diagnosis, ranked by expected gain, at most one per target,
       within max-active. Strategy experiments wait while a fleet-wide one collects.
-  evolve.py start --target S08 --lever method --hypothesis TEXT --commit HASH
-                  [--metric yield-per-run-unit|review-quality] [--empty-runs N] [--grant PATH]
+  evolve.py start --target alpha --lever method --hypothesis TEXT --commit HASH
+                  [--metric yield-per-run-unit|review-quality] [--empty-runs N] [--by-person] [--grant PATH]
       Record the baseline (the last passing runs) and the revert command. Refused when max-active
-      would be exceeded. The change itself is made and committed by the client before this runs.
+      would be exceeded, or when the target is a small sample (fewer than
+      levers.structural_min_runs runs) unless --by-person says the person made the change. The
+      change itself is made and committed by the client before this runs.
   evolve.py status [ID] [--json]
       Treatment runs collected so far, and runs remaining.
   evolve.py verdict [ID] [--dry-run] [--json]
@@ -213,7 +215,8 @@ def git_command(rec: Dict[str, Any], verdict: str) -> Optional[str]:
 # --------------------------------------------------------------------------- commands
 
 def start(home: Path, g: "steward.Grant", target: str, lever: str, hypothesis: str, commit: str,
-          metric: Optional[str] = None, empty_runs: Optional[int] = None, now: Optional[datetime] = None) -> Dict[str, Any]:
+          metric: Optional[str] = None, empty_runs: Optional[int] = None, now: Optional[datetime] = None,
+          by_person: bool = False, days: int = 30) -> Dict[str, Any]:
     now = _now(now)
     cfg = _settings(g)
     lever = str(lever)
@@ -230,6 +233,17 @@ def start(home: Path, g: "steward.Grant", target: str, lever: str, hypothesis: s
     blocked = max_active_violation(home, g, target_s, fleet)
     if blocked:
         return {"error": blocked}
+    tentative = None
+    if not fleet:
+        # Rule 12: the same test the diagnosis uses. A small sample takes a structural change only
+        # when the person made it.
+        yrep = _y().report(home, days, now, g.rules)
+        runs = int(((yrep["strategies"].get(target_s) or {}).get("runs")) or 0)
+        ok_s, why_s = g.why_for(lever, runs)
+        if not ok_s and why_s.startswith("tentative:"):
+            if not by_person:
+                return {"error": "%s for %s; pass --by-person if the person made this change" % (why_s, target_s)}
+            tentative = why_s
     eid = xc.next_id(home, "exp-%s-%s" % (oc.slug(target_s), lever), now.strftime("%Y-%m-%d"))
     ok, why = g.why(lever)
     rec = {"id": eid, "family": FAMILY, "target": target_s, "lever": lever, "scope": "fleet" if fleet else "strategy",
@@ -237,7 +251,9 @@ def start(home: Path, g: "steward.Grant", target: str, lever: str, hypothesis: s
            "revert": "git revert --no-edit %s" % commit, "started": oc.iso(now), "status": "collecting",
            "baseline": _baseline(home, target_s, metric, cfg["baseline_runs"], now, g.rules.get("points") or {}),
            "treatment": {"runs": 0, "needed": cfg["treatment_runs"]}, "keep_if": cfg["keep_if"],
-           "applied_under": "grant" if ok else "the person (%s)" % why}
+           "applied_under": "the person (--by-person)" if by_person else ("grant" if ok else "the person (%s)" % why)}
+    if tentative:
+        rec["tentative"] = tentative
     if not fleet:
         rec["funding"] = ("treatment runs are funded from the allocation reserve at the grant's searches max (%d per run), "
                           "not from other strategies" % g.bounds("searches")["max"])
@@ -323,9 +339,9 @@ def verdict(home: Path, g: Optional["steward.Grant"] = None, eid: Optional[str] 
 
 
 def propose(home: Path, g: Optional["steward.Grant"] = None, now: Optional[datetime] = None, days: int = 30,
-            diagnosis: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+            diagnosis: Optional[Dict[str, Any]] = None, settings_path: Optional[str] = None) -> Dict[str, Any]:
     g = g or steward.grant(None, home)
-    d = diagnosis or steward.load_script("diagnose").report(home, days, now, g)
+    d = diagnosis or steward.load_script("diagnose").report(home, days, now, g, settings_path=settings_path)
     yrep = steward.load_script("yield").report(home, days, now, g.rules)
     med = yrep.get("fleet_median_yield_per_unit") or 0.0
     lim = g.max_active()
@@ -359,6 +375,11 @@ def propose(home: Path, g: Optional["steward.Grant"] = None, now: Optional[datet
         cands.append({"target": FLEET_TARGET, "lever": "skills", "scope": "fleet", "leak": "review",
                       "change": "the reviewing persona's wording, from the kills in %s" % ", ".join(sorted(review_targets)),
                       "expected_gain": gain, "allowed": ok, "grant": why, "tentative": False, "metric": "review-quality"})
+    # Tentative candidates (small sample, or any lever the grant does not let apply on this
+    # strategy yet) never enter the actionable list.
+    small = [dict(c, allowed=False) for c in cands if c["tentative"] or str(c.get("grant", "")).startswith("tentative:")]
+    cands = [c for c in cands if not (c["tentative"] or str(c.get("grant", "")).startswith("tentative:"))]
+    small.sort(key=lambda c: (-c["expected_gain"], c["target"]))
     cands.sort(key=lambda c: (-c["expected_gain"], c["target"]))
     picked: List[Dict[str, Any]] = []
     seen = set()
@@ -393,6 +414,7 @@ def propose(home: Path, g: Optional["steward.Grant"] = None, now: Optional[datet
     # experiments, then over-performance).
     new_strategy.sort(key=lambda x: (x["leak"] != "source", x["from"]))
     return {"mode": g.mode, "candidates": picked, "held": held, "propose_strategy": new_strategy[:2],
+            "small_sample": small, "skipped": dict(d.get("skipped") or {}),
             "label": "expected_gain is an ESTIMATE used for ranking only; nothing here is measured",
             "next": "for each candidate the client writes the change, commits it, then runs evolve.py start with the hash"}
 
@@ -432,6 +454,12 @@ def render_proposals(p: Dict[str, Any]) -> str:
                                                          "apply" if c["allowed"] else "propose", " (tentative)" if c["tentative"] else ""))
     for h in p["held"]:
         L.append("  held: %s %s, %s" % (h["target"], h["lever"], h["held"]))
+    if p.get("small_sample"):
+        L.append("Proposals (small sample), for the person only:")
+        for c in p["small_sample"]:
+            L.append("  %s %s (%s leak): %s [propose: %s]" % (c["target"], c["lever"], c["leak"], c["change"], c.get("grant") or "tentative"))
+    for name, why in sorted((p.get("skipped") or {}).items()):
+        L.append("  skipped: %s, %s" % (name, why))
     for s in p["propose_strategy"]:
         L.append("  for the person: new strategy from %s (%s)" % (s["from"], s["why"]))
     return "\n".join(L)
@@ -441,11 +469,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     common = steward.common_flags()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter, parents=[common])
     sub = ap.add_subparsers(dest="cmd", required=True)
-    p = sub.add_parser("propose", parents=[common]); p.add_argument("--days", type=int, default=30)
+    p = sub.add_parser("propose", parents=[common]); p.add_argument("--days", type=int, default=30); p.add_argument("--settings")
     s = sub.add_parser("start", parents=[common])
     s.add_argument("--target", required=True); s.add_argument("--lever", required=True, choices=EXPERIMENT_LEVERS)
     s.add_argument("--hypothesis", required=True); s.add_argument("--commit", required=True)
     s.add_argument("--metric", choices=METRICS); s.add_argument("--empty-runs", type=int)
+    s.add_argument("--by-person", action="store_true", help="the person made this change; allowed on a small sample")
     st = sub.add_parser("status", parents=[common]); st.add_argument("id", nargs="?")
     v = sub.add_parser("verdict", parents=[common]); v.add_argument("id", nargs="?"); v.add_argument("--dry-run", action="store_true")
     args = steward.parse_args(ap, argv)
@@ -456,10 +485,11 @@ def main(argv: Optional[List[str]] = None) -> int:
         g = steward.grant(args.grant, home)
         now = oc.parse_when(args.now) if args.now else None
         if args.cmd == "propose":
-            rep: Any = propose(home, g, now, args.days)
+            rep: Any = propose(home, g, now, args.days, settings_path=args.settings)
             text = render_proposals(rep)
         elif args.cmd == "start":
-            rep = start(home, g, args.target, args.lever, args.hypothesis, args.commit, args.metric, args.empty_runs, now)
+            rep = start(home, g, args.target, args.lever, args.hypothesis, args.commit, args.metric, args.empty_runs, now,
+                        by_person=args.by_person)
             text = ("refused: " + rep["error"]) if rep.get("error") else "recorded %s. Baseline: %s. Revert with: %s" % (
                 rep["id"], json.dumps(rep["baseline"], sort_keys=True), rep["revert"])
         elif args.cmd == "status":

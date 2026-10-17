@@ -46,7 +46,7 @@ _IDENT = re.compile(r"[^A-Za-z0-9_.\-]+")
 
 
 def ident(name: Any) -> str:
-    """A strategy or target id: case kept (S08 stays S08), anything else becomes a dash."""
+    """A strategy or target id: case kept (Q7 stays Q7), anything else becomes a dash."""
     return _IDENT.sub("-", str(name or "").strip()).strip("-")[:64]
 
 
@@ -370,6 +370,34 @@ def parse_args(ap: argparse.ArgumentParser, argv: Optional[List[str]]) -> Option
     return args
 
 
+ELIGIBLE_STATUS = ("running", "ready")
+
+
+def eligibility(settings: Dict[str, Dict[str, Any]], name: str) -> Optional[str]:
+    """Why a strategy is out of the Steward's structural work, or None when it is in. A strategy
+    must be running or ready and scheduled; ad-hoc and done ones are skipped. A strategy the
+    settings do not mention is in (the client has not described it)."""
+    st = settings.get(name)
+    if st is None:
+        return None
+    status = str(st.get("status") or "running")
+    mode = str(st.get("mode") or "scheduled")
+    if status not in ELIGIBLE_STATUS:
+        return "status %s" % status
+    if mode != "scheduled":
+        return "mode %s" % mode
+    return None
+
+
+def load_settings_file(home: Path, path: Optional[str]) -> Dict[str, Dict[str, Any]]:
+    """The client's settings per strategy: --settings, else OTTO_HOME/strategies.json, else empty."""
+    p = Path(path).expanduser() if path else home / "strategies.json"
+    data = oc.read_json(p, None)
+    if not isinstance(data, dict):
+        return {}
+    return {ident(k): (v if isinstance(v, dict) else {}) for k, v in data.items()}
+
+
 def load_script(name: str):
     """Import a sibling script by file name. `yield` is a Python keyword, so yield.py is loaded here."""
     return importlib.import_module(name)
@@ -390,7 +418,7 @@ def run(kind: str, g: Grant, home: Path, pool: Optional[int], settings: Optional
     rep = y.report(home, days=days, now=now, rules=g.rules)
     out["yield"] = rep
     out["steps"].append("yield report")
-    d = diag.report(home, days=days, now=now, g=g, yield_report=rep)
+    d = diag.report(home, days=days, now=now, g=g, yield_report=rep, settings_path=settings)
     out["diagnosis"] = d
     out["steps"].append("diagnosis")
     if pool is not None:
@@ -406,7 +434,7 @@ def run(kind: str, g: Grant, home: Path, pool: Optional[int], settings: Optional
     out["verdicts"] = evo.verdict(home, g, now=now, write=not dry_run)
     out["steps"].append("experiment verdicts")
     if kind == "weekly":
-        out["proposals"] = evo.propose(home, g, now=now, days=days, diagnosis=d)
+        out["proposals"] = evo.propose(home, g, now=now, days=days, diagnosis=d, settings_path=settings)
         out["steps"].append("experiment proposals")
     return out
 
