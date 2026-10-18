@@ -118,7 +118,7 @@ The fifteen rules in [config/ops_playbook.md](config/ops_playbook.md), numbered 
 
 ## What you get
 
-Fifteen thin skills, one agent, five hooks, one background monitor, and a set of Python scripts with no dependencies beyond the standard library. Skills marked *you* only run when you invoke them; the rest Otto can also reach for on his own when a question fits.
+Fifteen thin skills (nineteen with steward mode), one agent, five hooks, one background monitor, and a set of Python scripts with no dependencies beyond the standard library. Skills marked *you* only run when you invoke them; the rest Otto can also reach for on his own when a question fits.
 
 | Command | Who | What it does |
 |---|---|---|
@@ -141,6 +141,14 @@ Fifteen thin skills, one agent, five hooks, one background monitor, and a set of
 **Hooks** (shipped, observe-only, fail open): `Stop` appends the per-session ledger row, `StopFailure` records rate-limit, billing and authentication failures with a timestamp, `Notification` records background-agent completions, `SessionStart` on resume reports the estimated cache-write cost before you continue a stale session, and the optional `UserPromptSubmit` guard described above. The **monitor** (`otto-watch`) starts the first time `/otto:watch` runs in a session and polls every five minutes; it also writes `Alerts.md` in the vault and can run from cron with `watch.py --once` when no session is open.
 
 **Portable bundles.** Two skills also ship as standalone `.skill` files for the Claude app's upload dialog: `otto-audit` (the audit with its scripts inside) and `otto` (the persona and playbook, for giving Otto your run histories by hand). Sources are under [`portable/`](portable/); `python3 scripts/bundle.py` builds them and CI attaches them to every tagged release.
+
+### Steward mode (opt-in)
+
+Off by default. If you run a fleet of scheduled discovery jobs and want Otto to move budget toward the ones that produce, you can grant him named levers: budget, cadence, model per stage, gates, a strategy's method, or a persona skill's wording. He then measures every run as a funnel, plans tomorrow's searches and cadence inside bounds you set and never above your pools, diagnoses where each strategy leaks, and runs one change at a time as a measured experiment that reverts itself when it does not pay.
+
+Unused pool is never handed to the strategies already running, since more volume on the same sources is exactly the failure he exists to stop. It is kept as a reserve that funds only experiments in progress and newly approved strategies, and whatever they do not need stays unspent.
+
+He applies only what the grant names. Everything else stays a proposal. With or without a grant he never creates or deletes a strategy, raises a pool, uses a model above the grant's ceiling, edits the rubric, kill list, recommendation, index or archive, or queues a persona review (the full list is in [the Rails section of docs/steward.md](docs/steward.md#rails-in-one-place)). Every applied change is one commit, logged with the command that reverts it. A pause file stops him outright. Four skills drive it: `/otto:yield`, `/otto:allocate`, `/otto:evolve` and `/otto:steward`. The grant template is [config/steward.template.md](config/steward.template.md) and the design is [docs/steward.md](docs/steward.md).
 
 ---
 
@@ -165,7 +173,7 @@ The morning status is a Sonnet run over a few kilobytes of ledger and registry; 
 
 ## What Otto never does
 
-- Edit your automations, skills, settings or schedules. He proposes; you apply.
+- Edit your automations, skills, settings or schedules. He proposes; you apply. The one exception is steward mode, and only for the levers your grant names.
 - Store prompts, outputs or file contents. The ledger is an allowlist of numbers and enums.
 - Send anything anywhere. No network calls, no telemetry, no accounts.
 - Use `--dangerously-skip-permissions`, or suggest it.
@@ -184,7 +192,7 @@ Claude Code (validated on 2.1.301), Python 3.9 or newer, macOS or Linux. The sta
 
 ## Status
 
-Version 0.1.0, early. The scripts, skills, hooks, monitor and tests are built, including the five skills designed in [docs/skills-roadmap.md](docs/skills-roadmap.md); a real week of runner data and the measured audit results are still to come. [SCOPE.md](SCOPE.md) says what is in and out, [BUILD.md](BUILD.md) has the plan, [docs/troubleshooting.md](docs/troubleshooting.md) has the common causes of an empty report. Start with `/otto:doctor` when something looks wrong.
+Version 0.2.0, early. The scripts, skills, hooks, monitor and tests are built, including the five skills designed in [docs/skills-roadmap.md](docs/skills-roadmap.md) and the opt-in steward mode; a real week of runner data and the measured audit results are still to come. [SCOPE.md](SCOPE.md) says what is in and out, [BUILD.md](BUILD.md) has the plan, [docs/troubleshooting.md](docs/troubleshooting.md) has the common causes of an empty report. Start with `/otto:doctor` when something looks wrong.
 
 ---
 

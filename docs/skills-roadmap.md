@@ -76,6 +76,19 @@ Rules that apply to all five, unchanged from the rest of Otto: Otto writes only 
 - **retro share** (`retro.py report --markdown`): the weekly numbers as a Markdown report for a team or a customer, names and numbers only.
 - **estimate** lives inside `experiment`.
 
+## Steward mode (0.2.0)
+
+Designed with Matt on 2026-10-17 for a fleet of discovery strategies. Opt-in: these four skills apply nothing unless a steward grant names the lever, and even then the client applies the plan, one logged commit per change. The design is in [steward.md](steward.md).
+
+| Skill | Script | What it does |
+|---|---|---|
+| `yield` | `yield.py report` | The funnel per strategy, points per 100 searches and per run-unit, smoothed yield, small-sample flags |
+| `allocate` | `allocate.py plan --pool N` | Tomorrow's searches, daily cap, cadence and stage models within the grant's bounds and the pool |
+| `evolve` | `evolve.py propose\|start\|status\|verdict` | One-change experiments with a measured baseline and a keep, revert or extend verdict |
+| `steward` | `steward.py run nightly\|weekly` | The mode runner: grant and pause check, then the scripts in order, ending with an Ops read |
+
+`diagnose.py` has no skill of its own; `evolve` and `steward` call it.
+
 ## Not in this round
 
 A `report` skill with its own format catalog, `migrate` as a skill that reads the source surface's definition, and watch on non-interactive surfaces (a launchd unit that runs `watch.py --once`, which the install guide can document).
