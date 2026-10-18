@@ -76,7 +76,7 @@ class Scenarios(unittest.TestCase):
     def test_budget_pools(self):
         rep = budget.report(self.home, self.now)
         self.assertEqual(len(rep["windows"]), 2)
-        self.assertIn("sdk_credit", rep["spend"])
+        self.assertIn("api_credit", rep["spend"])
         self.assertTrue(all("level" in w for w in rep["windows"] if w.get("available")))
 
     def test_retro_step_change(self):
@@ -129,6 +129,139 @@ class Runner(unittest.TestCase):
 
     def test_never_bypasses_permissions(self):
         self.assertNotIn("dangerously", (ROOT / "scripts/run.py").read_text().replace("never uses --dangerously", "").split("def build_argv")[1])
+
+
+class ApiKeyAccount(unittest.TestCase):
+    """An API-key login has no subscription windows; everything else must still work."""
+
+    def test_budget_without_windows(self):
+        with tempfile.TemporaryDirectory() as t:
+            h = Path(t)
+            (h / "otto.md").write_text("---\nbudget_weekly_usd: 10\n---\n")
+            now = oc.parse_when(NOW)
+            ledger.upsert_run(h, {"ts": "2026-09-23T10:00:00-05:00", "automation": "a", "session_id": "k1", "source": "wrapper",
+                                  "surface": "local-cli", "outcome": "pass", "cost_usd": 2.5})
+            rep = budget.report(h, now)
+            self.assertFalse(any(w["available"] for w in rep["windows"]))
+            self.assertIn("API-key", rep["windows"][0]["reason"])
+            self.assertEqual(rep["spend"]["weekly_used_percent"], 25.0)
+            self.assertNotIn("api_credit", rep["spend"])
+
+    def test_capture_without_rate_limits(self):
+        # An API-key session still writes a statusline capture, just with no rate_limits block.
+        import time
+        with tempfile.TemporaryDirectory() as t:
+            (Path(t) / "state").mkdir()
+            (Path(t) / "otto.md").write_text("---\nguard: block\n---\n")
+            (Path(t) / "state/statusline.json").write_text(json.dumps({"captured_at": int(time.time())}))
+            rep = budget.report(Path(t), oc.parse_when(NOW))
+            self.assertFalse(any(w["available"] for w in rep["windows"]))
+            r = subprocess.run([sys.executable, str(ROOT / "scripts/guard.py")], input='{"prompt":"hi"}',
+                               env=dict(os.environ, OTTO_HOME=t), capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0)
+
+    def run_job(self, t, settings, **env_extra):
+        """Run a stub job and return (result, what the stub saw for the two credential variables)."""
+        h = Path(t)
+        (h / "vault/Automations").mkdir(parents=True, exist_ok=True)
+        (h / "vault/Automations/job.md").write_text(
+            '---\nname: job\nsurface: local-cli\ncommand: "/x"\ndays: daily\nexpected_by: "23:59"\ntimezone: UTC\n'
+            'cwd: /tmp\ntimeout_min: 1\nregistered: "2026-01-01"\n---\n')
+        (h / "otto.md").write_text("---\nbreaker_threshold: 2\n%s---\n" % settings)
+        dump = h.parent / (h.name + "-env.txt")
+        stub = h / "stub.sh"
+        stub.write_text('#!/bin/bash\necho "key=${ANTHROPIC_API_KEY-unset} oauth=${CLAUDE_CODE_OAUTH_TOKEN-unset}" > %s\n'
+                        'echo \'{"type":"result","is_error":false,"total_cost_usd":0.1,"result":"x"}\'\n' % dump)
+        stub.chmod(0o755)
+        env = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")}
+        env.update(OTTO_HOME=t, CLAUDE_BIN=str(stub), **env_extra)
+        try:
+            r = subprocess.run([sys.executable, str(ROOT / "scripts/run.py"), "job", "--now", "2026-01-10T12:00:00+00:00"],
+                               env=env, capture_output=True, text=True)
+            return r, dump.read_text().strip() if dump.exists() else None
+        finally:
+            dump.unlink(missing_ok=True)
+
+    def test_runner_inherits_key_without_a_command(self):
+        with tempfile.TemporaryDirectory() as t:
+            r, seen = self.run_job(t, "", ANTHROPIC_API_KEY="sk-ant-test-KEYVALUE")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(seen, "key=sk-ant-test-KEYVALUE oauth=unset")
+
+    def test_api_key_cmd_supplies_key_and_drops_oauth(self):
+        # A scheduler environment with a stale OAuth token and no key: the job must see only the key.
+        with tempfile.TemporaryDirectory() as t:
+            r, seen = self.run_job(t, 'api_key_cmd: "echo sk-ant-test-KEYVALUE"\n', CLAUDE_CODE_OAUTH_TOKEN="stale")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(seen, "key=sk-ant-test-KEYVALUE oauth=unset")
+            self.assertEqual([x.get("credential") for x in ledger.read_rows(Path(t), kind="run")], ["api_key"])
+            for f in Path(t).rglob("*"):
+                if f.is_file() and f.name != "otto.md":
+                    self.assertNotIn("KEYVALUE", f.read_text(errors="ignore"), f)
+
+    def test_token_cmd_drops_inherited_key(self):
+        with tempfile.TemporaryDirectory() as t:
+            r, seen = self.run_job(t, 'token_cmd: "echo oauth-test"\n', ANTHROPIC_API_KEY="sk-ant-test-KEYVALUE")
+            self.assertEqual(r.returncode, 0, r.stderr)
+            self.assertEqual(seen, "key=unset oauth=oauth-test")
+            self.assertEqual([x.get("credential") for x in ledger.read_rows(Path(t), kind="run")], ["subscription"])
+
+    def test_both_commands_refused(self):
+        with tempfile.TemporaryDirectory() as t:
+            r, seen = self.run_job(t, 'token_cmd: "echo a"\napi_key_cmd: "echo b"\n')
+            self.assertEqual(r.returncode, 2)
+            self.assertIn("not both", r.stderr)
+            self.assertIsNone(seen)
+
+    def test_api_key_failures_classify(self):
+        import run
+        self.assertEqual(run.classify_failure(1, {}, "Invalid API key · Please run /login", False), "auth")
+        self.assertEqual(run.classify_failure(1, {}, "Credit balance is too low", False), "budget")
+
+
+class ApiCredit(unittest.TestCase):
+    """The monthly API credit pays for headless API-key runs only."""
+
+    def test_credential_from_env(self):
+        self.assertEqual(oc.credential_from_env({"ANTHROPIC_API_KEY": "k", "CLAUDE_CODE_OAUTH_TOKEN": "t"}), "api_key")
+        self.assertEqual(oc.credential_from_env({"CLAUDE_CODE_OAUTH_TOKEN": "t"}), "subscription")
+        self.assertIsNone(oc.credential_from_env({}))
+
+    def test_ledger_keeps_only_known_credentials(self):
+        self.assertEqual(ledger.sanitize_run({"credential": "api_key"})["credential"], "api_key")
+        self.assertNotIn("credential", ledger.sanitize_run({"credential": "sk-ant-leaked"}))
+
+    def test_only_api_key_headless_runs_count(self):
+        with tempfile.TemporaryDirectory() as t:
+            h = Path(t)
+            (h / "otto.md").write_text("---\napi_credit_usd: 100\n---\n")
+            rows = [("a1", "local-cli", "api_key", 4.0), ("a2", "local-cli", "subscription", 8.0),
+                    ("a3", "local-cli", None, 16.0), ("a4", "github-actions", "api_key", 32.0), ("a5", "interactive", "api_key", 64.0)]
+            for sid, surface, cred, cost in rows:
+                row = {"ts": "2026-09-10T10:00:00-05:00", "automation": "job", "session_id": sid, "source": "wrapper",
+                       "surface": surface, "outcome": "pass", "cost_usd": cost}
+                if cred:
+                    row["credential"] = cred
+                ledger.upsert_run(h, row)
+            c = budget.report(h, oc.parse_when(NOW))["spend"]["api_credit"]
+            self.assertEqual(c["estimated_used_usd"], 4.0)
+            self.assertEqual(c["runs_in_period"], 1)
+            self.assertEqual(c["runs_not_counted"], 1)
+            self.assertIn("api_key_cmd", c["not_counted_reason"])
+
+    def test_stop_hook_records_credential(self):
+        with tempfile.TemporaryDirectory() as t:
+            tp = Path(t) / "s.jsonl"
+            tp.write_text(json.dumps({"type": "assistant", "sessionId": "hook-1", "timestamp": "2026-09-10T15:00:00Z",
+                                      "message": {"id": "m1", "model": "claude-sonnet-5-5", "usage": {"input_tokens": 10, "output_tokens": 5}}}) + "\n")
+            env = {k: v for k, v in os.environ.items() if k not in ("CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY")}
+            env.update(OTTO_HOME=t, OTTO_AUTOMATION="job", ANTHROPIC_API_KEY="sk-ant-test-KEYVALUE")
+            r = subprocess.run([sys.executable, str(ROOT / "scripts/hook.py"), "stop"], input=json.dumps({"session_id": "hook-1", "transcript_path": str(tp)}),
+                               env=env, capture_output=True, text=True)
+            self.assertEqual(r.returncode, 0)
+            rows = ledger.read_rows(Path(t), kind="run")
+            self.assertEqual([x.get("credential") for x in rows], ["api_key"])
+            self.assertNotIn("KEYVALUE", json.dumps(rows))
 
 
 class Hooks(unittest.TestCase):

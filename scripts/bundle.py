@@ -5,7 +5,7 @@
     bundle.py --check        validate the portable sources and build nothing
     bundle.py --out DIR      build somewhere other than dist/
 
-The plugin's ten skills depend on ${CLAUDE_PLUGIN_ROOT}, Claude Code hooks and the local ledger, so
+The plugin's skills depend on ${CLAUDE_PLUGIN_ROOT}, Claude Code hooks and the local ledger, so
 they cannot be uploaded one by one. The two folders under portable/ are the skills that can travel:
 
     otto         the dispatcher persona and playbook, for people who use Otto's judgment in the app

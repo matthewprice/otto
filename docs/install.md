@@ -4,7 +4,7 @@ Three ways in, depending on where you use Claude. Pick one; they do not conflict
 
 | You use | Install path | What you get |
 |---|---|---|
-| Claude Code in a terminal | Marketplace, two commands | The whole plugin: ten skills, the Otto agent, hooks, runner |
+| Claude Code in a terminal | Marketplace, two commands | The whole plugin: every skill, the Otto agent, hooks, runner |
 | The Claude app (desktop or web) or Cowork | Add marketplace in app settings | The whole plugin, synced to Cowork and to Claude Code signed into the same account |
 | The Claude app, one skill at a time | Upload a `.skill` file | `otto-audit` or the `otto` persona, nothing else needed |
 | Another agent (Codex, Cursor, Gemini CLI, and so on) | `npx skills add` | The skill folders; only `audit` works fully outside Claude Code |

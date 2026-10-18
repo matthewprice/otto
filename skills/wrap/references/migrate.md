@@ -30,4 +30,4 @@ Why: a loop dies with the session and expires after seven days.
 
 ## Subscription login under a scheduler
 
-`claude -p` under cron or launchd does not see your interactive login. Run `claude setup-token` once and set `token_cmd` in `~/.otto/otto.md` to a command that prints it (a keychain or password-manager read). The runner exports it per run and never writes it to disk. If runs start failing with `auth`, the token expired: run `setup-token` again, then `run.py NAME --reset-breaker`.
+`claude -p` under cron or launchd does not see your interactive login. Run `claude setup-token` once and set `token_cmd` in `~/.otto/otto.md` to a command that prints it (a keychain or password-manager read). The runner exports it per run and never writes it to disk. On an API-key account, set `api_key_cmd` to a command that prints the key instead; set one of the two, not both. If runs start failing with `auth` on a subscription, the token expired: run `setup-token` again, then `run.py NAME --reset-breaker`.

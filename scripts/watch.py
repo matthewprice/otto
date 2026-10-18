@@ -37,7 +37,7 @@ def snapshot(home: Path, now: datetime) -> Dict[str, Any]:
     b = budget.report(home, now)
     autos = {f["automation"]: {"status": f["status"], "summary": f["summary"]} for f in h["findings"]}
     windows = {w["window"]: w.get("level", "n/a") for w in b["windows"] if w.get("available")}
-    credit = (b["spend"].get("sdk_credit") or {}).get("level")
+    credit = (b["spend"].get("api_credit") or {}).get("level")
     return {"ts": oc.iso(now), "automations": autos, "windows": windows, "credit": credit}
 
 
@@ -61,7 +61,7 @@ def diff(prev: Optional[Dict[str, Any]], cur: Dict[str, Any]) -> List[str]:
         elif old in ("watch", "critical") and level == "ok":
             out.append("%s window back to ok" % w)
     if cur.get("credit") != prev.get("credit") and cur.get("credit") in ("watch", "critical"):
-        out.append("SDK credit estimate is %s" % cur["credit"])
+        out.append("API credit estimate is %s" % cur["credit"])
     return out
 
 
