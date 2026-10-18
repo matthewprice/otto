@@ -62,6 +62,11 @@ def usage(cost: float, rng: random.Random) -> dict:
     return {MODEL: main, AUX: aux}
 
 
+# Which account each fixture automation bills. The API-key jobs draw on the monthly API credit;
+# the one on the subscription login draws on the 5-hour and 7-day windows.
+CREDENTIAL = {"weekly-brief": "api_key", "inbox-triage": "api_key", "morning-digest": "api_key", "nightly-sync": "subscription"}
+
+
 def run_row(name, start, minutes, cost, rng, *, exit_code=0, stop="success", attempt=1, outcome="pass",
             evidence=None, skipped=None):
     row = {
@@ -71,6 +76,8 @@ def run_row(name, start, minutes, cost, rng, *, exit_code=0, stop="success", att
         "session_id": sid("%s-%s-%d" % (name, start.isoformat(), attempt)),
         "entrypoint": "sdk-cli", "version": "2.1.301", "attempt": attempt, "note": "fixture",
     }
+    if name in CREDENTIAL:
+        row["credential"] = CREDENTIAL[name]
     if skipped:
         row.update({"outcome": "skipped", "skipped_reason": skipped, "exit": 0})
         return row
@@ -138,7 +145,7 @@ def generate(out: Path) -> None:
     # ---- config
     (out / "otto.md").write_text("\n".join([
         "---", 'timezone: "America/Chicago"', "lights: on", "notify: none", 'plan: "Max 5x (example)"',
-        "budget_weekly_usd: 40", "sdk_credit_usd: 100", "sdk_credit_reset_day: 1",
+        "budget_weekly_usd: 40", "api_credit_usd: 100", "api_credit_reset_day: 1",
         "alert_percents: [50, 75, 90]", "guard: off", "attempt_cap_per_day: 2", "breaker_threshold: 3",
         "---", "Synthetic Otto config for the fixture month.", ""]), encoding="utf-8")
 

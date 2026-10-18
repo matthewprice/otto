@@ -33,6 +33,9 @@ def main() -> int:
             if tp and os.path.isfile(tp):
                 row = ledger.row_from_transcript(Path(tp), auto, "local-cli" if auto else "interactive")
                 if row:
+                    cred = oc.credential_from_env()
+                    if cred:
+                        row["credential"] = cred
                     ledger.upsert_run(oc.otto_home(), row)
         elif mode == "stopfailure":
             label = LABELS.get(str(data.get("error") or data.get("error_type") or "unknown"), "error")

@@ -1,4 +1,4 @@
-<p align="center"><img src="assets/banner.svg" width="100%" alt="Otto. Put every token to work. The ops layer for the Claude jobs that run without you. He proposes. You run the command."></p>
+<p align="center"><img src="assets/banner.svg" width="100%" alt="Otto. Put every token to work. The ops layer for the agentic workflows that run without you. He proposes. You run the command."></p>
 
 <p align="center">
   <a href="https://github.com/matthewprice/otto/actions/workflows/ci.yml"><img src="https://github.com/matthewprice/otto/actions/workflows/ci.yml/badge.svg" alt="ci"></a>
@@ -8,7 +8,7 @@
   <img src="https://img.shields.io/badge/dependencies-none-2f8f5b" alt="no dependencies">
 </p>
 
-**Put every token to work.** A Claude subscription is a budget of attention that refills every five hours and every week, whether you use it or not. The jobs you schedule are supposed to turn that budget into finished work while you are elsewhere. Otto is the operations layer that makes sure they do: he keeps the registry of what should run, proves what did, counts what it cost, paces spend against the limits that actually gate your plan, audits the context tax of everything you have installed, and measures every change so next week's work costs less than this week's. He runs inside Claude Code and the Claude app on the subscription you already have. He proposes. He never changes anything without being told.
+**Put every token to work.** Your agentic workflows are supposed to turn tokens into finished work while you are elsewhere. On a Claude subscription, those tokens are a budget that refills every five hours and every week, whether you use it or not. On an API key, every token is billed, including the ones a failed run burns. Either way, Otto is the operations layer that makes sure the tokens land. He keeps a registry of what should run, proves what did, counts what it cost, and paces spend against the limits that actually gate you. He also audits the context tax of everything you have installed and measures every change, so next week's work costs less than this week's. He runs inside Claude Code and the Claude app on the account you already have, subscription or [API key](#api-key-accounts). He proposes. He never changes anything without being told.
 
 ```
 /plugin marketplace add matthewprice/otto
@@ -16,41 +16,45 @@
 /otto:demo
 ```
 
+Then, on your own setup: `/otto:onboard` (a ten-minute interview), `/otto:discover` (finds the workflows already on the machine and registers the ones you confirm), and `/otto:status` (what ran, what did not, what it cost).
+
 Claude app or Cowork: Settings, Plugins, Add marketplace, paste `matthewprice/otto`. One skill as a file: drop `otto-audit.skill` or `otto.skill` from the [latest release](https://github.com/matthewprice/otto/releases/latest) into Settings, Skills, Upload a skill. Other agents: `npx skills add matthewprice/otto`. Every path, what it writes where, and how to uninstall: [docs/install.md](docs/install.md).
 
 ---
 
 ## Who this is for
 
-Otto is for people who run Claude as infrastructure rather than as a chat window: forward-deployed engineers who have to answer a customer's "did it run, what did it cost, what do we change" in month two of every agent deployment, and practitioners with a Max plan and a crontab who want the windows they pay for filled with work instead of expiring unused.
+Otto is for people who run Claude as infrastructure rather than as a chat window: agentic workflows on a schedule, in CI, or in the background, and someone who has to answer three questions about them every week. Did it run? What did it cost? What should change? Otto calls each workflow he tracks an automation.
 
-The levers Otto works, in the order they usually pay:
+- **On a Pro or Max plan:** you want the windows you already pay for filled with work instead of expiring unused.
+- **On an API key:** you pay per token, so you want every run capped, every repeated failure stopped early, and spend tracked per workflow, not per invoice.
 
-1. **Fill the windows you already pay for.** Scheduled work that lands in a quiet window is free at the margin; the same work during your keyboard hours competes with you for the limit. `/otto:timeline` shows the day and proposes the move.
+Five ways Otto puts tokens back to work. The first is for subscriptions; the other four apply to both.
+
+1. **Fill the windows you already pay for.** A workflow that lands in a quiet window costs nothing extra; the same workflow during your keyboard hours competes with you for the limit. `/otto:timeline` shows the day and proposes the move.
 2. **Stop paying for runs that produce nothing.** Retries, turn-limit failures, expired logins that fail three nights in a row, routines that silently skip. `/otto:status` reports the miss first; the runner's breaker stops the bleeding.
-3. **Cut the context tax.** Over-cap descriptions, bloated CLAUDE.md files, never-used MCP servers and skills, jobs that start cold and re-pay their prefix every run. `/otto:audit` measures it; `/otto:timeline` clusters the cold starts.
-4. **Right-size each job.** The digest does not need the model the refactor needs. `/otto:experiment estimate` projects the change from the job's own token mix; `start` and `status` measure whether it paid.
+3. **Cut the context tax.** Over-cap descriptions, bloated CLAUDE.md files, never-used MCP servers and skills, workflows that start cold and re-pay their prefix every run. `/otto:audit` measures it; `/otto:timeline` clusters the cold starts.
+4. **Right-size each workflow.** The digest does not need the model the refactor needs. `/otto:experiment estimate` projects the change from the workflow's own token mix; `start` and `status` measure whether it paid.
 5. **Keep the proof.** Months of ledger, a weekly retro, and a shareable report, so the number you quote is one you measured.
 
 ---
 
 ## What you cannot do in Claude today
 
-As of October 2026, Claude Code gives you five first-party ways to run Claude on a schedule (`/loop` in a session, desktop scheduled tasks, cloud routines, GitHub Actions, Managed Agents) plus Cowork tasks. Each one is good at running. None of them can see the others, none of them tells you what the fleet is doing with your allowance, and none of them does any of the following. Otto exists for this list.
+As of October 2026, Claude can run on a schedule in several first-party places: `/loop` in a session, Desktop scheduled tasks, cloud routines, and Managed Agents scheduled deployments (beta). Add Claude in GitHub Actions and any `claude -p` workflow you put under cron or launchd. Each is good at running. None of them does the following, and Otto exists for this list.
 
 | | Without Otto | With Otto |
 |---|---|---|
-| **See the fleet** | Each surface shows its own run list. There is no view of everything you have scheduled, across machines and surfaces, in one place. | One registry: every automation, on any surface, described once with its cadence, its expected cost, and what success looks like. |
-| **Notice silence** | Nothing reports a run that did not happen. A skipped routine, a laptop that slept through cron, an expired login under launchd: the first sign is the report that never arrived. | Silence is a finding. A run that was due and left no trace is a `miss`, reported before anything that succeeded. |
-| **Judge success by output** | Anthropic's own docs say a green status means the session started and exited without an infrastructure error, not that the task in your prompt succeeded. | Every run is judged against its registered expectation: the file exists, is recent, matches its pattern, and cost and duration sit inside their bands. |
-| **Keep months of cost history** | `/usage` attributes spend to skills, agents and plugins, but it is local to one machine, seven days deep, and UI-only. | A ledger of every run, months deep, in a file you own. Cost per automation per week, step changes dated, retries counted as the full runs they are. |
-| **Pace three pools at once** | The 5-hour window, the 7-day window and the monthly Agent SDK credit are separate limits shown in separate places. When the credit runs out with extra usage off, programmatic use stops with no notification. | One read: each pool, percent used against percent of the period elapsed, projected exhaustion date, and which automations to defer. |
-| **Cap a headless job** | `--max-budget-usd` works in print mode only. Hooks receive no token, cost or rate-limit data, so nothing native can stop a job that is burning a day of budget on retries. | A guarded runner for `claude -p` jobs: turn, budget and time caps, prompts denied rather than left hanging, an attempt cap per day, and a circuit breaker after three consecutive failures. |
-| **Hold the line in a session** | No hook can block a turn because your 5-hour window is at 92 percent. | An opt-in guard that reads the statusline's rate-limit data and warns or blocks at the threshold you set. Off by default. |
-| **Audit context cost with real numbers** | `/skill-doctor` and `claude plugin details` are useful and partial. The community auditors estimate tokens as words times 1.3. | Every skill, agent, plugin, MCP server and CLAUDE.md measured against the real caps, with findings from transcripts labelled MEASURED and findings from file sizes labelled ESTIMATE. |
+| **Notice silence** | Nothing reports a run that did not happen. A skipped routine, a laptop that slept through cron, an expired login under launchd: the first sign is the report that never arrived. Routines and Desktop tasks share a run list; `/loop`, cron, GitHub Actions and Managed Agents each keep their own. | One registry of every workflow on every surface, with its cadence and what success looks like. A run that was due and left no trace is a `miss`, reported before anything that succeeded. |
+| **Judge success by output** | Anthropic's routines docs say a green status means the session started and exited without an infrastructure error, not that the task in your prompt succeeded. | Every run is judged against its registered expectation: the file exists, is recent, matches its pattern, and cost and duration sit inside their bands. |
+| **Keep months of cost history** | `/usage` attributes spend to skills, plugins, MCP servers and loops, over 24 hours or 7 days, for one machine. Local session data is deleted after 30 days by default. Longer history means running an OpenTelemetry backend. | A ledger of every run, months deep, in a file you own, with no backend to run. Cost per workflow per week, step changes dated, retries counted as the full runs they are. |
+| **Pace every limit at once** | On a subscription, the 5-hour and 7-day windows gate interactive and `claude -p` use alike, and only the statusline reads them live. Max and Team plans also include a monthly API credit that pays only for API-key runs, shown on the Console Billing page; when it runs out with no purchased credits, API requests stop until it refreshes. On an API key, the Console shows spend by workspace and model, not by workflow. | One read: each limit, percent used against percent of the period elapsed, projected exhaustion, spend per workflow, and which workflows to defer. |
+| **Stop repeat failures** | `--max-turns` and `--max-budget-usd` cap a single `claude -p` run. Nothing native caps attempts per day, stops a workflow after its third failure in a row, or skips a run whose output already exists. | A guarded runner for `claude -p` workflows: turn, budget and time caps, prompts denied rather than left hanging, an attempt cap per day, a circuit breaker after repeated failures, and an idempotency check. |
+| **Hold the line in a session** | No setting or hook can stop a turn because your 5-hour window is at 92 percent. Hooks never receive the window percentages, and `autoContinueAtUsageLimit` only waits for the reset. | An opt-in guard that reads the statusline's rate-limit data and warns or blocks at the threshold you set. Off by default. |
+| **Audit context cost with real numbers** | `claude plugin details` projects each plugin's always-on token cost, and `/usage` attributes spend to skills and MCP servers. Neither checks your CLAUDE.md files, finds the MCP servers and skills you never use, or shows which workflows start with a cold cache. | Every skill, agent, plugin, MCP server and CLAUDE.md measured against the real caps, with findings from transcripts labelled MEASURED and findings from file sizes labelled ESTIMATE. |
 | **Know what a change saved** | You apply a recommendation and hope. | `/otto:experiment` records a baseline, you apply the change, and the verdict comes from three passing runs on each side. A saving exists only once it has been measured. |
 
-If Anthropic ships one of these natively, Otto reads it instead of reimplementing it. The list of what is already native, and therefore not his job, lives in [docs/what-claude-code-does-natively.md](docs/what-claude-code-does-natively.md) and is kept current every release.
+Otto only builds what Claude does not already do. When Claude Code ships a feature that covers one of these rows, Otto switches to reading that feature's data and retires his own version. [What Claude Code already does](docs/what-claude-code-does-natively.md) lists what is native today and which native features Otto reads.
 
 ---
 
@@ -72,24 +76,24 @@ Otto is a dispatcher: the person in the depot who knows what is scheduled, notic
 Every report ends with an **Ops read**: two to five sentences on what matters most, the one thing to change this week, and what will hit a limit next. This is what `/otto:demo` prints on its synthetic month. Every name and number below is made up to show the shape.
 
 ```
-Otto status  Wed 24 Sep 09:15                                  (synthetic demo data)
+Otto status  Thu 24 Sep 09:15                                  (synthetic demo data)
 
 MISS     repo-watch      routine       due 06:30; no ledger row, no file work/repo-watch/2026-09-24.md
-BREAKER  nightly-sync    local-cli     open since Mon 02:06; authentication_failed three runs in a row
+BREAKER  nightly-sync    local-cli     open since Tue 02:06; authentication_failed three runs in a row
 FAIL     weekly-brief    local-cli     08:29, exit 1 (error_max_turns); no file work/briefs/2026-W39.md
 DRIFT    inbox-triage    local-cli     ran ok, but 19.0 min (band 2 to 12) and $2.94 (band $0.30 to $1.50)
 OK       desktop-notes   desktop-task  output found, 1,704 bytes; no ledger row, so cost is unknown
 OK       morning-digest  local-cli     07:04, $1.28
 
 Windows  5-hour 31%, resets 12:05        7-day 58% with 68% of the week elapsed, on pace for 86%  watch
-Credit   SDK credit about 79% used with 78% of the month elapsed; projected to run out 30 Sep    watch
+Credit   API credit about 61% used with 78% of the month elapsed; on pace for $78 of $100     watch
 Week     $28.85 reported; $10.18 of it on runs that failed (weekly-brief, twice)
 
 Ops read. Two of six automations did not deliver and a third is stopped. nightly-sync is a login that
-expired on Monday; nothing told you until now, and the fix is one `claude setup-token` and a breaker
-reset. weekly-brief has spent $10.14 on two turn-limit failures; raise max_turns from 8 to 12 before
-Friday or it fails a third time. The SDK credit runs out a day before it refreshes unless Friday's
-brief is deferred. I have not changed anything.
+expired on Sunday; nothing told you until now, and the fix is one `claude setup-token` and a breaker
+reset. weekly-brief has spent $10.14 on two turn-limit failures, all of it from the API credit; raise
+max_turns from 8 to 12 before Monday or it fails a third time. The credit is on pace to hold this
+month. I have not changed anything.
 ```
 
 ---
@@ -104,7 +108,7 @@ The fifteen rules in [config/ops_playbook.md](config/ops_playbook.md), numbered 
 4. **Measured and estimated stay apart.** Every figure is labelled MEASURED or ESTIMATE. An estimate is never presented as a saving.
 5. **Propose, never apply.** Otto writes his own registry notes and `~/.otto`. He never edits your automation, skill, settings or schedule unless you tell him to in the current conversation.
 6. **Reported cost is not a bill.** Cost is what Claude Code reported, a client-side estimate at list price. Your usage page is the source of truth.
-7. **Three pools, never merged.** Subscription windows, the monthly Agent SDK credit, and your own soft budgets are separate limits, reported separately.
+7. **Three pools, never merged.** Subscription windows, the monthly API credit (Max and Team, API-key runs only), and your own soft budgets are separate limits, reported separately.
 8. **Cap every headless job.** Turns, budget, timeout, and an allowlist of tools. Prompts are denied, not left waiting for someone who is asleep.
 9. **Retries are runs.** A retry costs a full run. Attempts are capped per day and stopped after repeated failures.
 10. **Fail open, except the guard.** Observers never block your work. Only the opt-in guard may block, and it always lets `/otto:` commands and the phrase `otto: go ahead` through.
@@ -124,7 +128,7 @@ Fifteen thin skills (nineteen with steward mode), one agent, five hooks, one bac
 |---|---|---|
 | `/otto:status` | both | Per-automation status: ok, miss, fail, late, drift, breaker, unobservable |
 | `/otto:why NAME` | both | The evidence behind a failure or a cost jump, and the one check that confirms it |
-| `/otto:budget` | both | 5-hour, 7-day and Agent SDK credit pacing, kept as separate pools |
+| `/otto:budget` | both | 5-hour and 7-day windows, the monthly API credit, and soft budgets, kept as separate pools |
 | `/otto:audit [path]` | both | Context-tax audit of a project, measured findings apart from estimates |
 | `/otto:retro` | you | Weekly deltas, silent misses, cost step changes, measured effect of the changes you logged |
 | `/otto:wrap NAME` | you | The guarded runner for a headless job, plus a launchd, cron or systemd unit you install yourself |
@@ -163,11 +167,20 @@ Everything Otto does is reading, with two exceptions: the ledger he writes and t
 - **Budget.** Pacing from the statusline's rate-limit data (persisted to a side file by a capture you install through onboarding, since plugins cannot ship a statusline) and from reported run cost.
 - **Audit.** Skills, agents, plugins, MCP servers and CLAUDE.md measured against the real caps, with transcript-backed findings labelled MEASURED.
 
-What each surface gives Otto to read, and where he is blind, is in [docs/architecture.md](docs/architecture.md). The persona is in [docs/persona.md](docs/persona.md).
+### What Otto can see on each surface
+
+| Surface | What Otto reads | What he cannot see |
+|---|---|---|
+| `claude -p` on your machine, through the runner | Everything: outcome, cost, tokens, turns, duration, which account it billed, and the output file | Nothing in the run itself |
+| `claude -p` or a session on your machine, without the runner | Cost, tokens and duration from the Stop hook, and the output file | Attempts, caps and the breaker, which only the runner applies |
+| `/loop` in a session | The session's cost through the hooks, and each iteration's output file | The cost of one iteration on its own |
+| Desktop scheduled tasks, cloud routines, Cowork, GitHub Actions, Managed Agents | The output file the workflow leaves when it succeeds | Cost and tokens. A workflow with no success file shows as `unobservable` |
+
+How the pieces fit is in [docs/architecture.md](docs/architecture.md). The persona is in [docs/persona.md](docs/persona.md).
 
 ### What Otto costs to run
 
-The morning status is a Sonnet run over a few kilobytes of ledger and registry; the audit is weekly and announced with its own cost. The agent runs at `model: sonnet`, `effort: medium`. `claude plugin details otto` estimated about 740 tokens always-on across all ten skills and the agent when last checked; run it yourself, since that figure is Claude Code's estimate and will move as the skills change.
+The morning status is a Sonnet run over a few kilobytes of ledger and registry; the audit is weekly and announced with its own cost. The agent runs at `model: sonnet`, `effort: medium`. `claude plugin details otto` estimated about 1,340 tokens always-on for version 0.1.0 (fifteen skills and the agent) in October 2026, before steward mode added four more; run it yourself, since that figure is Claude Code's estimate and will move as the skills change.
 
 ---
 
@@ -189,6 +202,15 @@ Cost figures are what Claude Code reported per run, a client-side estimate at li
 ## Requirements
 
 Claude Code (validated on 2.1.301), Python 3.9 or newer, macOS or Linux. The statusline passthrough that enables the 5-hour and 7-day figures needs a Pro or Max plan. Windows is not supported in 0.1.
+
+### API-key accounts
+
+Otto also works when Claude Code is signed in with an Anthropic API key instead of a subscription. The registry, ledger, status, why, timeline, audit and retro read what Claude Code records for each session, which is the same on either account.
+
+- **Runner:** a scheduler does not load your shell profile, so set `api_key_cmd` in `~/.otto/otto.md` to a command that prints the key (a keychain or password-manager read). The runner exports it as `ANTHROPIC_API_KEY` for that run only and never writes it to disk. Set `api_key_cmd` or `token_cmd`, not both: each one also removes the other credential from the job's environment, so a run bills exactly the account you chose. With neither set, the job inherits whatever its environment holds.
+- **Not applicable:** the 5-hour and 7-day windows (`/otto:budget` reports them as unavailable) and the guard (it acts only on those windows, so it always allows).
+- **The monthly API credit:** if your key belongs to the Console organization linked to a Max or Team plan, your API-key runs draw on that plan's monthly credit. Set `api_credit_usd` and `api_credit_reset_day` (the day your billing cycle starts) and Otto paces it. Otherwise leave them empty.
+- **Use instead:** `budget_daily_usd` and `budget_weekly_usd` in `~/.otto/otto.md`. Reported cost is still a client-side estimate at list price, but on an API key that is the price you pay, so the soft budgets track your bill more closely than they do on a subscription.
 
 ## Status
 

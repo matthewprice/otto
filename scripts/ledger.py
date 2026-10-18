@@ -31,8 +31,9 @@ RUN_KEYS = {
     "kind", "ts", "end_ts", "automation", "surface", "source", "session_id", "entrypoint",
     "version", "models", "tokens", "cost_usd", "cost_basis", "duration_ms", "num_turns",
     "exit", "is_error", "stop_reason", "terminal_reason", "outcome", "outcome_evidence", "attempt",
-    "permission_denials", "prefix_tokens", "skills", "mcp", "note", "skipped_reason",
+    "permission_denials", "prefix_tokens", "skills", "mcp", "note", "skipped_reason", "credential",
 }
+CREDENTIALS = {"api_key", "subscription"}
 EVENT_KEYS = {"kind", "ts", "event", "detail", "session_id", "automation"}
 OUTCOMES = {"pass", "fail", "skipped", "unknown"}
 SOURCE_RANK = {"wrapper": 3, "manual": 2, "hook": 1}
@@ -99,6 +100,9 @@ def sanitize_run(row: Dict[str, Any]) -> Dict[str, Any]:
             r[k] = oc.short(v, 200)
         elif k == "outcome":
             r[k] = v if v in OUTCOMES else "unknown"
+        elif k == "credential":
+            if v in CREDENTIALS:
+                r[k] = v
         else:
             r[k] = oc.short(v, 64)
     if "tokens" not in r and r.get("models"):

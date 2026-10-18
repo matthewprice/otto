@@ -21,7 +21,7 @@ Otto writes its own registry notes and `~/.otto`. It never edits a user's automa
 Cost is what Claude Code reported, a client-side estimate at list price. Say "reported cost".
 
 ## 7. Three pools, never merged
-Subscription windows, the monthly Agent SDK credit, and soft budgets are separate limits. Report each alone.
+Subscription windows, the monthly API credit (Max and Team, API-key runs only), and soft budgets are separate limits. Report each alone.
 
 ## 8. Cap every headless job
 Turns, budget, timeout, and an allowlist of tools. Prompts are denied, not left waiting.

@@ -138,7 +138,7 @@ def banner_svg() -> str:
     Plain monospace text with room to spare, so it survives whatever font the viewer substitutes."""
     sprite = cells(SPRITES["otto-driver"])
     stripe = "".join('<rect x="%d" y="226" width="14" height="14" fill="#f7b32b"/>' % x for x in range(0, 1200, 28))
-    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 240" width="1200" height="240" role="img" aria-label="Otto, the ops manager for your Claude automations">
+    return f'''<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 240" width="1200" height="240" role="img" aria-label="Otto, the ops layer for your agentic workflows">
   <rect width="1200" height="240" fill="#0e1013"/>
   <rect width="1200" height="8" fill="#f7b32b"/>
   <rect y="226" width="1200" height="14" fill="#111214"/>
@@ -147,7 +147,7 @@ def banner_svg() -> str:
   <g font-family="'Courier New', Courier, monospace" font-weight="bold">
     <text x="300" y="100" font-size="52" fill="#f7b32b" letter-spacing="4">OTTO</text>
     <text x="300" y="144" font-size="21" fill="#e9e3d6">Put every token to work.</text>
-    <text x="300" y="176" font-size="16" fill="#9aa0a8">The ops layer for the Claude jobs that run without you.</text>
+    <text x="300" y="176" font-size="16" fill="#9aa0a8">The ops layer for the agentic workflows that run without you.</text>
     <text x="300" y="204" font-size="16" fill="#d97757">He proposes. You run the command.</text>
   </g>
 </svg>

@@ -112,15 +112,34 @@ def notify(cfg: Dict[str, Any], home: Path, message: str) -> None:
         oc.log_error("notify failed: %s" % e.__class__.__name__, home)
 
 
-def get_token(cfg: Dict[str, Any]) -> Optional[str]:
-    cmd = str(cfg.get("token_cmd") or "").strip()
-    if not cmd:
-        return None
+# Each credential command sets one variable and removes the other, so a job bills exactly the
+# account you configured even when the scheduler's environment carries both.
+CREDENTIALS = (("token_cmd", "CLAUDE_CODE_OAUTH_TOKEN", "ANTHROPIC_API_KEY"),
+               ("api_key_cmd", "ANTHROPIC_API_KEY", "CLAUDE_CODE_OAUTH_TOKEN"))
+
+
+def credential_source(cfg: Dict[str, Any]) -> Optional[str]:
+    """Which credential key is configured: token_cmd, api_key_cmd, None (inherit), or 'both' (an error)."""
+    set_ = [key for key, _, _ in CREDENTIALS if str(cfg.get(key) or "").strip()]
+    return "both" if len(set_) > 1 else (set_[0] if set_ else None)
+
+
+def read_secret(cmd: str) -> Optional[str]:
     try:
         p = subprocess.run(shlex.split(cmd), capture_output=True, text=True, timeout=20)
         return p.stdout.strip() or None
     except Exception:
         return None
+
+
+def apply_credential(cfg: Dict[str, Any], env: Dict[str, str]) -> None:
+    for key, var, other in CREDENTIALS:
+        cmd = str(cfg.get(key) or "").strip()
+        if cmd:
+            env.pop(other, None)
+            secret = read_secret(cmd)
+            if secret:
+                env[var] = secret
 
 
 # --------------------------------------------------------------------------- cycle logic
@@ -230,10 +249,15 @@ def main(argv: Optional[List[str]] = None) -> int:
     elif window_start is not None and attempts_in_cycle(a, rows, window_start, tz) >= cap:
         decision, reason = "skip", "attempt cap reached (%d)" % cap
 
+    cred = credential_source(cfg)
+    if cred == "both":
+        oc.eprint("otto-run: set token_cmd or api_key_cmd in ~/.otto/otto.md, not both")
+        return 2
     claude = resolve_claude(cfg)
     sid = str(uuid.uuid4())
     plan = {"automation": name, "decision": decision, "reason": reason, "cycle": mode, "due": oc.iso(due)}
     if args.dry_run:
+        plan["credential"] = cred or "inherited environment"
         plan["command"] = build_argv(a, cfg, claude or "claude", sid)
         plan["claude_found"] = bool(claude)
         plan["timeout_min"] = float(a.get("timeout_min") or 30)
@@ -269,9 +293,7 @@ def main(argv: Optional[List[str]] = None) -> int:
     env = dict(os.environ)
     env["OTTO_AUTOMATION"] = name
     env["OTTO_HOME"] = str(home)
-    tok = get_token(cfg)
-    if tok:
-        env["CLAUDE_CODE_OAUTH_TOKEN"] = tok
+    apply_credential(cfg, env)
     cwd = os.path.expanduser(str(a.get("cwd") or "")) or None
     if cwd and not os.path.isdir(cwd):
         oc.eprint("otto-run: cwd %s does not exist" % cwd)
@@ -319,6 +341,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         if art is not None and not art["ok"]:
             outcome, evidence = "fail", "output check: " + "; ".join(art["reasons"])[:150]
     row["outcome"], row["outcome_evidence"] = outcome, evidence
+    cred = oc.credential_from_env(env)
+    if cred:
+        row["credential"] = cred
     saved = ledger.upsert_run(home, row)
 
     # breaker

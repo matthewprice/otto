@@ -4,9 +4,12 @@
 Three pools, kept apart on purpose:
   1. The subscription windows (5-hour and 7-day), from the statusline side file. Pro and Max only,
      and only as fresh as the last statusline refresh, so the age is always reported.
-  2. The monthly Agent SDK credit for unattended runs, if you set sdk_credit_usd. Otto estimates
-     consumption from the cost Claude Code reported for your headless runs. The official figure
-     is on your usage page; this is a pacing aid, not a bill.
+  2. The monthly API credit that Max and Team plans include, if you set api_credit_usd. It pays
+     for `claude -p` and Agent SDK runs only when they use an API key from the Console organization
+     linked to your plan; the same runs on your subscription login draw on the windows instead.
+     Otto counts headless runs whose ledger row says credential: api_key, and reports the rest as
+     not counted. Other keys in that organization spend the same balance and Otto cannot see them,
+     so the Console Billing page is the source of truth; this is a pacing aid, not a bill.
   3. Optional soft budgets you set in otto.md.
 
 Usage: budget.py [--home DIR] [--now ISO] [--json | --table]
@@ -26,7 +29,9 @@ import ledger  # noqa: E402
 import otto_common as oc  # noqa: E402
 
 WINDOWS = (("five_hour", timedelta(hours=5), "5-hour"), ("seven_day", timedelta(days=7), "7-day"))
-HEADLESS_SURFACES = {"local-cli", "github-actions"}
+# Runs the API credit can pay for. GitHub Action, IDE and desktop runs count as Claude Code
+# usage, which the credit never covers, so only local headless runs and the Agent SDK qualify.
+CREDIT_SURFACES = {"local-cli"}
 
 
 def read_side(home: Path) -> Optional[Dict[str, Any]]:
@@ -98,7 +103,7 @@ def spend_report(home: Path, cfg: Dict[str, Any], now: datetime) -> Dict[str, An
     rows = [r for r in ledger.read_rows(home, since=now - timedelta(days=70), kind="run")]
     midnight = datetime.combine(now.date(), time(0, 0), tzinfo=now.tzinfo)
     week_start = midnight - timedelta(days=now.weekday())
-    credit_start = period_start(now, cfg.get("sdk_credit_reset_day") or 1)
+    credit_start = period_start(now, cfg.get("api_credit_reset_day") or 1)
 
     def ts(r: Dict[str, Any]) -> datetime:
         return oc.parse_when(r.get("ts"), now.tzinfo)
@@ -107,11 +112,13 @@ def spend_report(home: Path, cfg: Dict[str, Any], now: datetime) -> Dict[str, An
         return round(sum(r.get("cost_usd") or 0.0 for r in rs), 2)
 
     def headless(r: Dict[str, Any]) -> bool:
-        return r.get("surface") in HEADLESS_SURFACES or str(r.get("entrypoint", "")).startswith("sdk")
+        return r.get("surface") in CREDIT_SURFACES or str(r.get("entrypoint", "")).startswith("sdk")
 
     today = [r for r in rows if ts(r) >= midnight]
     week = [r for r in rows if ts(r) >= week_start]
-    period = [r for r in rows if ts(r) >= credit_start and headless(r)]
+    in_period = [r for r in rows if ts(r) >= credit_start and headless(r) and r.get("outcome") != "skipped"]
+    period = [r for r in in_period if r.get("credential") == "api_key"]
+    unattributed = [r for r in in_period if not r.get("credential")]
     by: Dict[str, Dict[str, Any]] = {}
     for r in week:
         k = r.get("automation") or "(interactive)"
@@ -146,7 +153,7 @@ def spend_report(home: Path, cfg: Dict[str, Any], now: datetime) -> Dict[str, An
     if daily:
         rep["daily_budget_usd"] = float(daily)
         rep["daily_used_percent"] = round(rep["today_usd"] / float(daily) * 100, 1)
-    credit = cfg.get("sdk_credit_usd")
+    credit = cfg.get("api_credit_usd")
     if credit:
         credit = float(credit)
         end = next_period(credit_start)
@@ -155,7 +162,12 @@ def spend_report(home: Path, cfg: Dict[str, Any], now: datetime) -> Dict[str, An
         c: Dict[str, Any] = {"credit_usd": credit, "estimated_used_usd": used, "estimated_used_percent": round(used / credit * 100, 1),
                              "period_start": oc.iso(credit_start), "refreshes_at": oc.iso(end),
                              "elapsed_percent": round(elapsed * 100, 1), "runs_in_period": len(period),
-                             "note": "Estimate from reported run cost. Your usage page is the source of truth."}
+                             "runs_not_counted": len(unattributed),
+                             "note": "Estimate from the reported cost of Otto's API-key runs. Other keys in the same Console "
+                                     "organization spend this balance too; the Console Billing page is the source of truth."}
+        if unattributed:
+            c["not_counted_reason"] = ("%d headless run(s) this period did not record which credential they used, so they are "
+                                       "not counted. Set api_key_cmd or token_cmd so the runner records it." % len(unattributed))
         if elapsed >= 0.05 and used > 0:
             proj = used / elapsed
             c["projected_usd_at_refresh"] = round(proj, 2)
@@ -171,7 +183,7 @@ def spend_report(home: Path, cfg: Dict[str, Any], now: datetime) -> Dict[str, An
         else:
             c["level"] = "ok"
         c["alerts_crossed"] = [a for a in alerts if pct >= a]
-        rep["sdk_credit"] = c
+        rep["api_credit"] = c
     return rep
 
 
@@ -196,9 +208,12 @@ def render_table(rep: Dict[str, Any]) -> str:
             " (stale: %s)" % w.get("note", "capture older than 15 min") if w.get("stale") else ""))
     s = rep["spend"]
     L.append("spend    today $%.2f, this week $%.2f (failed runs: $%.2f)" % (s["today_usd"], s["week_usd"], s["week_failed_usd"]))
-    if "sdk_credit" in s:
-        c = s["sdk_credit"]
-        L.append("credit   ~%.1f%% of $%g used (estimate), %s%% of the period gone [%s]" % (c["estimated_used_percent"], c["credit_usd"], c["elapsed_percent"], c["level"]))
+    if "api_credit" in s:
+        c = s["api_credit"]
+        L.append("credit   API credit ~%.1f%% of $%g used (estimate, Otto's API-key runs only), %s%% of the period gone [%s]" % (
+            c["estimated_used_percent"], c["credit_usd"], c["elapsed_percent"], c["level"]))
+        if c.get("runs_not_counted"):
+            L.append("         %d headless run(s) not counted: no credential recorded" % c["runs_not_counted"])
     return "\n".join(L)
 
 

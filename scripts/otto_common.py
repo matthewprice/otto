@@ -31,8 +31,8 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "plan": "",                 # free text, for the Ops read only
     "budget_daily_usd": None,   # optional soft budgets for headless spend
     "budget_weekly_usd": None,
-    "sdk_credit_usd": None,     # your monthly Agent SDK credit, if you have one
-    "sdk_credit_reset_day": 1,  # day of month the credit refreshes
+    "api_credit_usd": None,     # monthly API credit included with Max and Team plans, if you claimed it
+    "api_credit_reset_day": 1,  # day of month your billing cycle starts (the credit refreshes then)
     "alert_percents": [50, 75, 90],
     "guard": "off",             # off | warn | block (opt-in UserPromptSubmit guard)
     "guard_5h_percent": 90,
@@ -43,6 +43,7 @@ DEFAULT_CONFIG: Dict[str, Any] = {
     "breaker_threshold": 3,     # wrapper: consecutive failures before the breaker opens
     "claude_bin": "",
     "token_cmd": "",            # command that prints CLAUDE_CODE_OAUTH_TOKEN (keychain, pass, op...)
+    "api_key_cmd": "",          # command that prints ANTHROPIC_API_KEY; set this or token_cmd, not both
     "tone": "dry",
     "watch_desktop": True,      # watch: also send a desktop notification on a state change
     "watch_interval_s": 300,    # watch: seconds between polls
@@ -51,6 +52,18 @@ DEFAULT_CONFIG: Dict[str, Any] = {
 
 
 # --------------------------------------------------------------------------- paths
+
+def credential_from_env(env: Optional[Dict[str, str]] = None) -> Optional[str]:
+    """Which account a Claude Code process bills: "api_key", "subscription", or None when the
+    environment does not say (a /login session or an apiKeyHelper). An API key wins over an
+    OAuth token, as it does in Claude Code."""
+    env = os.environ if env is None else env
+    if env.get("ANTHROPIC_API_KEY"):
+        return "api_key"
+    if env.get("CLAUDE_CODE_OAUTH_TOKEN"):
+        return "subscription"
+    return None
+
 
 def otto_home() -> Path:
     env = os.environ.get("OTTO_HOME")
