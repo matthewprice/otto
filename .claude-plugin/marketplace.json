@@ -5,13 +5,13 @@
     "url": "https://github.com/matthewprice"
   },
   "metadata": {
-    "description": "Operations tooling for people who run Claude as infrastructure and want their subscription doing work around the clock."
+    "description": "Operations tooling for people who run Claude as infrastructure and want every token, on a subscription or an API key, doing work around the clock."
   },
   "plugins": [
     {
       "name": "otto",
       "source": "./",
-      "description": "Put every token to work: registry, ledger, silence detection, budget pacing, context-tax audit, measured changes, live watch.",
+      "description": "Ops layer for Claude agentic workflows: did each run happen, did it deliver, what did it cost. Paces 5-hour, weekly and API-credit limits, audits context tax, measures every change. Claude Code plugin.",
       "category": "monitoring",
       "keywords": ["automation", "observability", "cost", "scheduled-tasks"]
     }
